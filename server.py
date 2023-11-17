@@ -1,6 +1,7 @@
 import socket
 import threading
 import os
+import sys
 
 class FileServer:
     def __init__(self, host, port):
@@ -8,6 +9,7 @@ class FileServer:
         self.port = port
         self.clients = {}  # {client_address: {"hostname": hostname, "files": [list of files]}}
         self.lock = threading.Lock()  # To synchronize access to shared data
+        self.is_running = True  # Flag to control server running state
 
     def start(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -18,12 +20,12 @@ class FileServer:
 
         threading.Thread(target=self.command_line_interface).start()
 
-        while True:
+        while self.is_running:
             client_socket, client_address = server_socket.accept()
             threading.Thread(target=self.handle_client, args=(client_socket, client_address)).start()
 
     def command_line_interface(self):
-        while True:
+        while self.is_running:
             command = input("Enter server command: ")
             self.process_server_command(command)
 
@@ -76,6 +78,8 @@ class FileServer:
             self.server_discover(command_parts[1])
         elif command_parts[0] == "ping":
             self.server_ping(command_parts[1])
+        elif command_parts[0] == "shutdown":
+            self.shutdown()
         else:
             print(f"Unknown server command: {command}")
 
@@ -139,6 +143,11 @@ class FileServer:
             response = f"No hosts found with hostname '{hostname}'"
 
         print(response)
+
+    def shutdown(self):
+        print("Shutting down the server...")
+        self.is_running = False
+        sys.exit(0)
 
 if __name__ == "__main__":
     server = FileServer("localhost", 5555)
