@@ -97,10 +97,10 @@ class FileServer:
 
         if found_clients:
             response = f"Available sources for '{file_name}': {', '.join(str(addr) for addr in found_clients)}"
+            client_socket.send(response.encode("utf-8"))
         else:
             response = f"No sources found for '{file_name}'"
-
-        client_socket.send(response.encode("utf-8"))
+            client_socket.send(response.encode("utf-8"))
 
     def quit(self, client_socket, client_address):
         # with self.lock:

@@ -37,7 +37,11 @@ class FileClient:
                 if not data:
                     break
 
-                print(data)
+                if data.startswith("Available sources for"):
+                    self.handle_fetch_sources(client_socket, data)
+                    # print(data)
+                else:
+                    print(data)
 
             except Exception as e:
                 print(f"Error receiving messages: {e}")
@@ -64,6 +68,22 @@ class FileClient:
         command = f"fetch {file_name}"
         client_socket.send(command.encode("utf-8"))
 
+    def handle_fetch_sources(self, client_socket, data):
+        sources_data = data.split(":")[1].strip()
+        print(f"{data}")
+        print(sources_data)
+
+        # for source_data in sources_data:
+        # source_address, source_files = sources_data
+        # print(f"Source: {source_address}, Files: {source_files}")
+
+        # Automatically initiate P2P connection to the source
+        # target_socket = self.p2p_connect(sources_data)
+        # print(target_socket)
+        #     if target_socket:
+        #         # self.download_file(target_socket, file_name)
+        #         target_socket.close()
+
     def quit(self, client_socket):
         with self.lock:
             command = "quit"
@@ -75,6 +95,20 @@ class FileClient:
     def send_hostname(self, client_socket):
         command = f"hostname {self.hostname}"
         client_socket.send(command.encode("utf-8"))
+
+    def p2p_connect(self, target_address):
+        try:
+            target_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # target_socket.connect((target_address, self.server_port))
+            target_socket.connect(target_address)
+            return target_socket
+        except Exception as e:
+            print(f"Error connecting to {target_address}: {e}")
+            return None
+
+    def download_file(self, target_socket, file_name):
+        # Implement file download logic here
+        pass
 
 if __name__ == "__main__":
     client = FileClient()
