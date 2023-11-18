@@ -12,16 +12,16 @@ class FileClient:
         self.hostname = None
 
     def start(self):
-        self.hostname = input("Enter your unique hostname: ")
+        # self.hostname = input("Enter your unique hostname: ")
 
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((self.server_host, self.server_port))
 
         # Send the client's hostname to the server
-        self.send_hostname(client_socket)
+        self.init_hostname(client_socket)
 
         threading.Thread(target=self.receive_messages, args=(client_socket,)).start()
-
+        
         # Command-shell interpreter
         while True:
             command = input("Enter command: ")
@@ -45,6 +45,22 @@ class FileClient:
 
             except Exception as e:
                 print(f"Error receiving messages: {e}")
+                break
+
+    def init_hostname(self, client_socket):
+        self.hostname = input("Enter your unique hostname: ")
+        self.send_hostname(client_socket)
+        data = client_socket.recv(1024).decode("utf-8")
+        if not data:
+            return
+        while "is already in use." in data:
+            print(data)
+            self.hostname = input("Enter your unique hostname: ")
+            self.send_hostname(client_socket)
+            data = client_socket.recv(1024).decode("utf-8")
+            if not data:
+                break
+            if "set for" in data:
                 break
 
     def process_command(self, client_socket, command):

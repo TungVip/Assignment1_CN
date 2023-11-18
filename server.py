@@ -67,7 +67,7 @@ class FileServer:
         elif command_parts[0] == "quit":
             self.quit(client_socket, client_address)
         elif command_parts[0] == "hostname":
-            self.set_hostname(client_address, command_parts[1])
+            self.set_hostname(client_socket, client_address, command_parts[1])
         else:
             print(f"Unknown command from {client_address}: {command}")
 
@@ -111,14 +111,18 @@ class FileServer:
         #     print(f"Connection from {client_address} closed")
         print(f"The client {client_address} has quitted")
 
-    def set_hostname(self, client_address, hostname):
+    def set_hostname(self, client_socket, client_address, hostname):
         with self.lock:
             if client_address in self.clients:
                 if not any(data["hostname"] == hostname for addr, data in self.clients.items() if addr != client_address):
                     self.clients[client_address]["hostname"] = hostname
-                    print(f"Hostname '{hostname}' set for {client_address}")
+                    response = f"Hostname '{hostname}' set for {client_address}"
+                    print(response)
+                    client_socket.send(response.encode("utf-8"))
                 else:
-                    print(f"Hostname '{hostname}' is already in use.")
+                    response = f"Hostname '{hostname}' is already in use."
+                    print(response)
+                    client_socket.send(response.encode("utf-8"))
             else:
                 print(f"Unknown client {client_address}")
 
