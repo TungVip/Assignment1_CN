@@ -6,7 +6,7 @@ import sys
 class FileClient:
     def __init__(self):
         self.server_host = "localhost"
-        self.server_port = 5555
+        self.server_port = 55555
         self.local_files = {}  # {file_name: file_path}
         self.lock = threading.Lock()  # To synchronize access to shared data
         self.hostname = None

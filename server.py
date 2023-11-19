@@ -73,7 +73,9 @@ class FileServer:
     def process_server_command(self, command):
         command_parts = command.split()
 
-        if command_parts[0] == "discover":
+        if not command:
+            self.log("Server command cannot be blank!")
+        elif command_parts[0] == "discover":
             self.server_discover(command_parts[1])
         elif command_parts[0] == "ping":
             self.server_ping(command_parts[1])
@@ -85,20 +87,24 @@ class FileServer:
     def publish(self, client_address, local_name, file_name):
         with self.lock:
             if client_address in self.clients:
-                self.clients[client_address]["files"].append(file_name)
-                self.log(f"File '{file_name}' published by {client_address}")
+                self.clients[client_address]["files"].append({"local_name": local_name, "file_name": file_name})
+                self.log(f"File '{file_name}' published by {client_address} with local name '{local_name}'")
             else:
                 self.log(f"Unknown client {client_address}")
 
     def fetch(self, client_socket, requesting_client, file_name):
         with self.lock:
-            found_clients = [addr for addr, data in self.clients.items() if file_name in data["files"]]
+            found_clients = [(addr, data["files"]) for addr, data in self.clients.items() if any(file["file_name"] == file_name for file in data["files"])]
 
         if found_clients:
-            response = f"Available sources for '{file_name}': {', '.join(str(addr) for addr in found_clients)}"
+            response = "Available sources for '{}': ".format(file_name)
+            for addr, files in found_clients:
+                local_names = [file["local_name"] for file in files if file["file_name"] == file_name]
+                response += "{} ({}) ".format(addr, ', '.join(local_names))
+
             client_socket.send(response.encode("utf-8"))
         else:
-            response = f"No sources found for '{file_name}'"
+            response = "No sources found for '{}'".format(file_name)
             client_socket.send(response.encode("utf-8"))
 
     def quit(self, client_socket, client_address):
