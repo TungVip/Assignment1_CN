@@ -2,6 +2,7 @@ import socket
 import threading
 import os
 import sys
+import json
 import tkinter as tk
 from tkinter import scrolledtext
 
@@ -121,15 +122,20 @@ class FileServer:
             if client_address in self.clients:
                 if not any(data["hostname"] == hostname for addr, data in self.clients.items() if addr != client_address):
                     self.clients[client_address]["hostname"] = hostname
-                    response = f"Hostname '{hostname}' set for {client_address}"
-                    self.log(response)
+                    response_data = {"status": "success", "message": f"Hostname '{hostname}' set for {client_address}", "hostname": hostname, "address": client_address}
+                    response = json.dumps(response_data)
+                    self.log(response_data["message"])
                     client_socket.send(response.encode("utf-8"))
                 else:
-                    response = f"Hostname '{hostname}' is already in use."
-                    self.log(response)
+                    response_data = {"status": "error", "message": f"Hostname '{hostname}' is already in use.", "hostname": None, "address": None}
+                    response = json.dumps(response_data)
+                    self.log(response_data["message"])
                     client_socket.send(response.encode("utf-8"))
             else:
-                self.log(f"Unknown client {client_address}")
+                response_data = {"status": "error", "message": f"Unknown client {client_address}", "hostname": None, "address": None}
+                response = json.dumps(response_data)
+                self.log(response_data["message"])
+                client_socket.send(response.encode("utf-8"))
 
     def server_discover(self, hostname):
         with self.lock:

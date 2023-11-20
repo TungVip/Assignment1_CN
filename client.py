@@ -2,6 +2,7 @@ import socket
 import threading
 import os
 import sys
+import json
 
 class FileClient:
     def __init__(self):
@@ -47,27 +48,48 @@ class FileClient:
                 print(f"Error receiving messages: {e}")
                 break
 
+    def start_listener(self, client_adress):
+        listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener_socket.bind(client_adress)
+        listener_socket.listen()
+    #     while True:
+    #         client_socket, addr = listener_socket.accept()
+    #         threading.Thread(target=self.handle_client, args=(client_socket, addr)).start()
+
+    # def handle_client(self, client_socket, client_address):
+    #     pass
+
     def init_hostname(self, client_socket):
         self.hostname = input("Enter your unique hostname: ")
         self.send_hostname(client_socket)
-        data = client_socket.recv(1024).decode("utf-8")
+        data = json.loads(client_socket.recv(1024).decode("utf-8"))
         if not data:
             return
-        while "is already in use." in data:
-            print(data)
+        while data["status"] == "error":
+            print(data["message"])
             self.hostname = input("Enter your unique hostname: ")
             self.send_hostname(client_socket)
-            data = client_socket.recv(1024).decode("utf-8")
+            data = json.loads(client_socket.recv(1024).decode("utf-8"))
             if not data:
                 break
-            if "set for" in data:
+            if data["status"] == "success":
                 break
-
+        address = data["address"]
+        address = (address[0], int(address[1]))
+        self.start_listener(address)
+    
     def process_command(self, client_socket, command):
         command_parts = command.split()
 
         if command_parts[0] == "publish":
-            self.publish(client_socket, command_parts[1], command_parts[2])
+            if command_parts[1] == "" or command_parts[2] == "":
+                raise ValueError("filename and localname are required")
+            elif not os.path.exists(command_parts[1]):  
+                raise FileNotFoundError(f"{command_parts[1]} is not available")
+            elif not os.path.isfile(command_parts[1]):  
+                raise FileExistsError(f"{command_parts[1]} is not a file")
+            else:
+                self.publish(client_socket, command_parts[1], command_parts[2])
         elif command_parts[0] == "fetch":
             self.fetch(client_socket, command_parts[1])
         else:
