@@ -95,17 +95,18 @@ class FileServer:
 
     def fetch(self, client_socket, requesting_client, file_name):
         with self.lock:
-            found_clients = [(addr, data["files"]) for addr, data in self.clients.items() if any(file["file_name"] == file_name for file in data["files"])]
-
-        if found_clients:
-            response = "Available sources for '{}': ".format(file_name)
-            for addr, files in found_clients:
-                local_names = [file["local_name"] for file in files if file["file_name"] == file_name]
-                response += "{} ({}) ".format(addr, ', '.join(local_names))
-
+            found_client = next(((addr, data["files"]) for addr, data in self.clients.items() if any(file["file_name"] == file_name for file in data["files"])), None)
+    
+        if found_client:
+            addr, files = found_client
+            local_name = next(file["local_name"] for file in files if file["file_name"] == file_name)
+    
+            response_data = {"file_name": file_name, "error": None, "source": {"address": addr, "local_name": local_name}}
+            response = json.dumps(response_data)
             client_socket.send(response.encode("utf-8"))
         else:
-            response = "No sources found for '{}'".format(file_name)
+            response_data = {"file_name": file_name, "error": "No sources found"}
+            response = json.dumps(response_data)
             client_socket.send(response.encode("utf-8"))
 
     def quit(self, client_socket, client_address):

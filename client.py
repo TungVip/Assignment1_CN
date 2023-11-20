@@ -34,11 +34,11 @@ class FileClient:
     def receive_messages(self, client_socket):
         while True:
             try:
-                data = client_socket.recv(1024).decode("utf-8")
+                data = json.loads(client_socket.recv(1024).decode("utf-8"))
                 if not data:
                     break
 
-                if data.startswith("Available sources for"):
+                if not data["error"]:
                     self.handle_fetch_sources(client_socket, data)
                     # print(data)
                 else:
@@ -52,8 +52,9 @@ class FileClient:
         listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listener_socket.bind(client_adress)
         listener_socket.listen()
+
     #     while True:
-    #         client_socket, addr = listener_socket.accept()
+            # client_socket, addr = listener_socket.accept()
     #         threading.Thread(target=self.handle_client, args=(client_socket, addr)).start()
 
     # def handle_client(self, client_socket, client_address):
@@ -107,16 +108,19 @@ class FileClient:
         client_socket.send(command.encode("utf-8"))
 
     def handle_fetch_sources(self, client_socket, data):
-        sources_data = data.split(":")[1].strip()
+        sources_data = data["source"]
         print(f"{data}")
         print(sources_data)
+        local_name = sources_data["local_name"]
+        address = sources_data["address"]
+        address = (address[0], int(address[1]))
 
         # for source_data in sources_data:
-        # source_address, source_files = sources_data
+        #     source_address, source_files = sources_data
         # print(f"Source: {source_address}, Files: {source_files}")
 
         # Automatically initiate P2P connection to the source
-        # target_socket = self.p2p_connect(sources_data)
+        target_socket = self.p2p_connect(address)
         # print(target_socket)
         #     if target_socket:
         #         # self.download_file(target_socket, file_name)
