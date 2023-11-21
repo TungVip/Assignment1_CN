@@ -19,9 +19,13 @@ class FileClient:
         client_socket.connect((self.server_host, self.server_port))
 
         # Send the client's hostname to the server
-        self.init_hostname(client_socket)
+        client_adress = self.init_hostname(client_socket)
 
         threading.Thread(target=self.receive_messages, args=(client_socket,)).start()
+
+        # Start the listener thread
+        self.listener_thread = threading.Thread(target=self.start_listener, args=(client_adress,))
+        self.listener_thread.start()
         
         # Command-shell interpreter
         while True:
@@ -49,16 +53,46 @@ class FileClient:
                 break
 
     def start_listener(self, client_adress):
-        listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        listener_socket.bind(client_adress)
-        listener_socket.listen()
+        self.listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listener_socket.bind(client_adress)
+        self.listener_socket.listen()
 
-    #     while True:
-            # client_socket, addr = listener_socket.accept()
-    #         threading.Thread(target=self.handle_client, args=(client_socket, addr)).start()
+        while True:
+            client_socket, addr = self.listener_socket.accept()
+            threading.Thread(target=self.handle_client, args=(client_socket, addr)).start()
 
-    # def handle_client(self, client_socket, client_address):
-    #     pass
+    def handle_client(self, client_socket, client_address):
+        while True:
+            
+            raw_data = client_socket.recv(1024).decode("utf-8")
+            print(f"This is raw_data received from client fetch request {raw_data}")
+            if not raw_data:
+                break
+            data = json.loads(raw_data)
+            print(data)
+
+            status = self.send_file(client_socket, data["local_name"])
+
+
+    def send_file(self, client_socket, local_name):
+        if not os.path.exists(local_name) or not os.path.isfile(local_name):
+            reply = {"status" : "Error"}
+            # reply.update({"status" : "Error"})
+            self.socket.send(json.dumps(reply).encode())
+            raise FileNotFoundError(f"{local_name} is not available")
+        fname = os.path.split(local_name)[-1]    
+        length = os.path.getsize(local_name)  
+        reply = {"status" : "OK", "length" : length, "file" : fname}
+        reply.update({"status" : "OK", "length" : length, "file" : fname})
+        client_socket.send(json.dumps(reply).encode())
+        print(f"currently at send file {reply}")
+        with open(local_name, "rb") as file:
+            offset = 0
+            while offset < length:
+                data = file.read(1024)
+                offset += len(data)
+                client_socket.send(data)
+        return True
 
     def init_hostname(self, client_socket):
         self.hostname = input("Enter your unique hostname: ")
@@ -77,7 +111,8 @@ class FileClient:
                 break
         address = data["address"]
         address = (address[0], int(address[1]))
-        self.start_listener(address)
+        # self.start_listener(address)
+        return address
     
     def process_command(self, client_socket, command):
         command_parts = command.split()
@@ -122,9 +157,9 @@ class FileClient:
         # Automatically initiate P2P connection to the source
         target_socket = self.p2p_connect(address)
         # print(target_socket)
-        #     if target_socket:
-        #         # self.download_file(target_socket, file_name)
-        #         target_socket.close()
+        if target_socket:
+            self.download_file(target_socket, local_name)
+            target_socket.close()
 
     def quit(self, client_socket):
         with self.lock:
@@ -148,9 +183,25 @@ class FileClient:
             print(f"Error connecting to {target_address}: {e}")
             return None
 
-    def download_file(self, target_socket, file_name):
+    def download_file(self, target_socket, local_name):
         # Implement file download logic here
-        pass
+        data = {"type" : "CONNECT", "action": "request", "local_name" : local_name}
+        target_socket.send(json.dumps(data).encode("utf-8"))
+        
+        data = json.loads(target_socket.recv(1024).decode())
+        print(f"currently at download file {data}")
+        # self.fname = data["file"]
+        fname = "a"
+        length = data["length"]
+        if data["status"] == "Error":
+            raise ConnectionAbortedError("File is not available")
+        with open(os.path.join(os.getcwd(),fname), "wb") as file:
+            offset = 0
+            while offset < length:  
+                recved = target_socket.recv(1024)
+                file.write(recved)
+                offset += 1024
+        return True
 
 if __name__ == "__main__":
     client = FileClient()
