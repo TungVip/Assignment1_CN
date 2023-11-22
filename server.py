@@ -151,14 +151,30 @@ class FileServer:
 
     def server_ping(self, hostname):
         with self.lock:
-            found_clients = [addr for addr, data in self.clients.items() if data["hostname"] == hostname]
+            found_clients = {addr: data["files"] for addr, data in self.clients.items() if data["hostname"] == hostname}
 
         if found_clients:
-            response = f"Hosts with hostname '{hostname}' are online: {', '.join(str(addr) for addr in found_clients)}"
-        else:
-            response = f"No hosts found with hostname '{hostname}'"
+            for client_address in found_clients:
+                response_data = self.send_ping(client_address)
+                self.log(response_data)
 
-        self.log(response)
+    def send_ping(self, client_address):
+        with self.lock:
+            if client_address in self.clients:
+                client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    client_socket.connect(client_address)
+                    ping_message = {"type": "ping", "error": None}
+                    client_socket.send(json.dumps(ping_message).encode("utf-8"))
+
+                    response_data = client_socket.recv(1024).decode("utf-8")
+                    return f"Ping response from {client_address}: {response_data}"
+                except Exception as e:
+                    return f"Error pinging {client_address}: {e}"
+                finally:
+                    client_socket.close()
+            else:
+                return f"Unknown client {client_address}"
 
     def shutdown(self):
         self.log("Shutting down the server...")

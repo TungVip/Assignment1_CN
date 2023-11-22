@@ -70,6 +70,11 @@ class FileClient:
                 break
             data = json.loads(raw_data)
             print(data)
+            if data["type"] == "ping":
+                client_socket.send(json.dumps({"type": "pong"}).encode("utf-8"))
+                client_socket.close()
+                break
+
 
             status = self.send_file(client_socket, data["local_name"])
 
@@ -82,8 +87,8 @@ class FileClient:
             raise FileNotFoundError(f"{local_name} is not available")
         fname = os.path.split(local_name)[-1]    
         length = os.path.getsize(local_name)  
-        reply = {"status" : "OK", "length" : length, "file" : fname}
-        reply.update({"status" : "OK", "length" : length, "file" : fname})
+        reply = {"status" : "available", "length" : length, "file" : fname}
+        reply.update({"status" : "available", "length" : length, "file" : fname})
         client_socket.send(json.dumps(reply).encode())
         print(f"currently at send file {reply}")
         with open(local_name, "rb") as file:
@@ -190,8 +195,7 @@ class FileClient:
         
         data = json.loads(target_socket.recv(1024).decode())
         print(f"currently at download file {data}")
-        # self.fname = data["file"]
-        fname = "a"
+        fname = data["file"] + "_fetch"
         length = data["length"]
         if data["status"] == "Error":
             raise ConnectionAbortedError("File is not available")
