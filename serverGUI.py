@@ -35,8 +35,8 @@ class ServerGUI:
         self.log_message("Server started.")
 
     def stop_server(self):
-        self.server.shutdown()
         self.log_message("Server stopped.")
+        self.server.shutdown()
 
     def send_command(self):
         command = self.command_entry.get()

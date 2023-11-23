@@ -11,6 +11,7 @@ class FileClient:
         self.local_files = {}  # {file_name: file_path}
         self.lock = threading.Lock()  # To synchronize access to shared data
         self.hostname = None
+        self.stop_threads = False  # Flag to signal threads to terminate
 
     def start(self):
         # self.hostname = input("Enter your unique hostname: ")
@@ -21,7 +22,8 @@ class FileClient:
         # Send the client's hostname to the server
         client_adress = self.init_hostname(client_socket)
 
-        threading.Thread(target=self.receive_messages, args=(client_socket,)).start()
+        self.receive_messages_thread = threading.Thread(target=self.receive_messages, args=(client_socket,))
+        self.receive_messages_thread.start()
 
         # Start the listener thread
         self.listener_thread = threading.Thread(target=self.start_listener, args=(client_adress,))
@@ -36,7 +38,7 @@ class FileClient:
             self.process_command(client_socket, command)
 
     def receive_messages(self, client_socket):
-        while True:
+        while not self.stop_threads:
             try:
                 data = json.loads(client_socket.recv(1024).decode("utf-8"))
                 if not data:
@@ -48,6 +50,11 @@ class FileClient:
                 else:
                     print(data)
 
+            except ConnectionResetError:
+                # Handle the case where the server closes the connection
+                print("Connection closed.")
+                break
+
             except Exception as e:
                 print(f"Error receiving messages: {e}")
                 break
@@ -57,12 +64,18 @@ class FileClient:
         self.listener_socket.bind(client_adress)
         self.listener_socket.listen()
 
-        while True:
-            client_socket, addr = self.listener_socket.accept()
-            threading.Thread(target=self.handle_client, args=(client_socket, addr)).start()
+        while not self.stop_threads:
+            try:
+                client_socket, addr = self.listener_socket.accept()
+                threading.Thread(target=self.handle_client, args=(client_socket, addr)).start()
+            except OSError as e:
+                # Check if the error is due to stopping threads, ignore otherwise
+                if not self.stop_threads:
+                    print(f"Error accepting connection: {e}")
+                    break
 
     def handle_client(self, client_socket, client_address):
-        while True:
+        while not self.stop_threads:
             
             raw_data = client_socket.recv(1024).decode("utf-8")
             print(f"This is raw_data received from client fetch request {raw_data}")
@@ -167,12 +180,17 @@ class FileClient:
             target_socket.close()
 
     def quit(self, client_socket):
+        self.stop_threads = True  # Set the flag to stop threads
         with self.lock:
             command = "quit"
             client_socket.send(command.encode("utf-8"))
-            client_socket.close()
-            print("Client connection closed. Exiting.")
-            sys.exit(0)
+        # Wait for threads to finish
+        # self.receive_messages_thread.join()
+        client_socket.close()
+        if hasattr(self, 'listener_socket'):
+            self.listener_socket.close()
+        print("Client connection closed. Exiting.")
+        sys.exit(0)
 
     def send_hostname(self, client_socket):
         command = f"hostname {self.hostname}"

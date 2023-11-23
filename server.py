@@ -22,6 +22,12 @@ class FileServer:
             print(message)
 
     def start(self):
+        server_thread = threading.Thread(target=self.run_server)
+        server_thread.start()
+
+    def run_server(self):
+        self.is_running = True
+
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((self.host, self.port))
         server_socket.listen()
@@ -29,14 +35,22 @@ class FileServer:
         self.log(f"Server listening on {self.host}:{self.port}")
 
         while self.is_running:
-            client_socket, client_address = server_socket.accept()
-            threading.Thread(target=self.handle_client, args=(client_socket, client_address)).start()
+            try:
+                client_socket, client_address = server_socket.accept()
+                threading.Thread(target=self.handle_client, args=(client_socket, client_address)).start()
+            except OSError as e:
+                # Check if the error is due to stopping the server, ignore otherwise
+                if not self.is_running:
+                    break
+                else:
+                    self.log(f"Error accepting connection: {e}")
 
     def handle_client(self, client_socket, client_address):
         with self.lock:
             self.clients[client_address] = {"hostname": None, "files": []}
 
-        self.log(f"New connection from {client_address}")
+        if self.is_running:
+            self.log(f"New connection from {client_address}")
 
         while True:
             try:
@@ -55,7 +69,8 @@ class FileServer:
                 del self.clients[client_address]
             if client_socket:
                 client_socket.close()
-            self.log(f"Connection from {client_address} closed")
+            if self.is_running:
+                self.log(f"Connection from {client_address} closed")
 
     def process_command(self, client_socket, client_address, command):
         command_parts = command.split()
@@ -157,6 +172,8 @@ class FileServer:
             for client_address in found_clients:
                 response_data = self.send_ping(client_address)
                 self.log(response_data)
+        else:
+            self.log(f"Unknown client '{hostname}'")
 
     def send_ping(self, client_address):
         with self.lock:
@@ -179,6 +196,10 @@ class FileServer:
     def shutdown(self):
         self.log("Shutting down the server...")
         self.is_running = False
+        # Create a dummy connection to unblock the server from accept, and then close the server socket
+        dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        dummy_socket.connect((self.host, self.port))
+        dummy_socket.close()
         sys.exit(0)
 
 # if __name__ == "__main__":
