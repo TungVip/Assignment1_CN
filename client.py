@@ -52,10 +52,12 @@ class FileClient:
 
             except ConnectionResetError:
                 # Handle the case where the server closes the connection
-                print("Connection closed.")
+                print("Connection closed by the server.")
                 break
 
             except Exception as e:
+                if self.stop_threads:
+                    break
                 print(f"Error receiving messages: {e}")
                 break
 

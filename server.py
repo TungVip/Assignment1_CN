@@ -47,12 +47,12 @@ class FileServer:
 
     def handle_client(self, client_socket, client_address):
         with self.lock:
-            self.clients[client_address] = {"hostname": None, "files": []}
+            self.clients[client_address] = {"hostname": None,"status": "online", "files": []}
 
         if self.is_running:
             self.log(f"New connection from {client_address}")
 
-        while True:
+        while self.clients[client_address]["status"] == "online":
             try:
                 data = client_socket.recv(1024).decode("utf-8")
                 if not data:
@@ -61,6 +61,8 @@ class FileServer:
                 self.process_command(client_socket, client_address, data)
 
             except Exception as e:
+                if self.clients[client_address]["status"] == "offline":
+                    break
                 self.log(f"Error handling client {client_address}: {e}")
                 break
 
@@ -125,7 +127,9 @@ class FileServer:
             client_socket.send(response.encode("utf-8"))
 
     def quit(self, client_socket, client_address):
-        # with self.lock:
+        with self.lock:
+            client = self.clients[client_address]
+            client.update({"status" : "offline"})
         #     if client_address in self.clients:
         #         del self.clients[client_address]
         #     if client_socket:
