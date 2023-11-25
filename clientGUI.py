@@ -6,14 +6,14 @@ import threading
 from client import FileClient
 
 class FileClientGUI:
-    def __init__(self, master):
-        self.master = master
-        self.master.title("File Client GUI")
+    def __init__(self):
+        self.client = FileClient(log_callback=self.log)
 
-        self.client = FileClient()
+        self.root = tk.Tk()
+        self.root.title("File Server GUI")
 
         # Hostname Frame
-        self.hostname_frame = ttk.Frame(self.master)
+        self.hostname_frame = ttk.Frame(self.root)
         self.hostname_frame.pack(padx=10, pady=10)
 
         hostname_label = ttk.Label(self.hostname_frame, text="Hostname:")
@@ -22,17 +22,17 @@ class FileClientGUI:
         self.hostname_entry = ttk.Entry(self.hostname_frame)
         self.hostname_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
 
-        init_hostname_button = ttk.Button(self.hostname_frame, text="Summit", command=self.init_hostname)
+        init_hostname_button = ttk.Button(self.hostname_frame, text="Submit", command=self.init_hostname)
         init_hostname_button.grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
 
         # Log Box
-        self.log_box = scrolledtext.ScrolledText(self.master, wrap=tk.WORD, width=60, height=10)
+        self.log_box = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, width=60, height=10)
         self.log_box.pack(padx=10, pady=10)
 
         # Commands Frame (Initially hidden)
-        self.commands_frame = ttk.Frame(self.master)
-        self.commands_frame.pack(padx=10, pady=10)
-        self.commands_frame.grid_remove()
+        self.commands_frame = ttk.Frame(self.root)
+        # Use pack for the commands frame
+        self.commands_frame.pack_forget()
 
         self.create_commands_widgets()
 
@@ -64,11 +64,11 @@ class FileClientGUI:
         hostname = self.hostname_entry.get()
         if hostname:
             try:
-                self.client.init_hostname(self.client.client_socket, hostname)
+                threading.Thread(target=self.client.start, args=(hostname, )).start()
                 self.log(f"Hostname '{hostname}' set successfully.")
                 # Show the main commands frame
                 self.hostname_frame.pack_forget()
-                self.commands_frame.grid()
+                self.commands_frame.pack()
             except Exception as e:
                 self.log(f"Error setting hostname: {e}")
         else:
@@ -101,16 +101,8 @@ class FileClientGUI:
         self.log_box.insert(tk.END, message + "\n")
         self.log_box.see(tk.END)
 
-def start_client_gui():
-    root = tk.Tk()
-    app = FileClientGUI(root)
-    root.mainloop()
 
 if __name__ == "__main__":
-    # Start the client GUI in a separate thread
-    gui_thread = threading.Thread(target=start_client_gui)
-    gui_thread.start()
+    gui = FileClientGUI()
+    gui.root.mainloop()
 
-    # Start the client in the main thread
-    client = FileClient()
-    client.start()

@@ -5,22 +5,29 @@ import sys
 import json
 
 class FileClient:
-    def __init__(self):
+    def __init__(self, log_callback=None):
         self.server_host = "localhost"
         self.server_port = 55555
         self.local_files = {}  # {file_name: file_path}
         self.lock = threading.Lock()  # To synchronize access to shared data
         self.hostname = None
         self.stop_threads = False  # Flag to signal threads to terminate
+        self.log_callback = log_callback
 
-    def start(self):
+    def log(self, message):
+        if self.log_callback:
+            self.log_callback(message)
+        else:
+            print(message)
+
+    def start(self, hostname):
         # self.hostname = input("Enter your unique hostname: ")
 
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((self.server_host, self.server_port))
 
         # Send the client's hostname to the server
-        client_adress = self.init_hostname(client_socket)
+        client_adress = self.init_hostname(client_socket, hostname)
 
         self.receive_messages_thread = threading.Thread(target=self.receive_messages, args=(client_socket,))
         self.receive_messages_thread.start()
@@ -30,12 +37,12 @@ class FileClient:
         self.listener_thread.start()
         
         # Command-shell interpreter
-        while True:
-            command = input("Enter command: ")
-            if command == "quit":
-                self.quit(client_socket)
-                break
-            self.process_command(client_socket, command)
+        # while True:
+        #     command = input("Enter command: ")
+        #     if command == "quit":
+        #         self.quit(client_socket)
+        #         break
+        #     self.process_command(client_socket, command)
 
     def receive_messages(self, client_socket):
         while not self.stop_threads:
@@ -114,8 +121,8 @@ class FileClient:
                 client_socket.send(data)
         return True
 
-    def init_hostname(self, client_socket):
-        self.hostname = input("Enter your unique hostname: ")
+    def init_hostname(self, client_socket, hostname):
+        self.hostname = hostname
         self.send_hostname(client_socket)
         data = json.loads(client_socket.recv(1024).decode("utf-8"))
         if not data:
@@ -227,6 +234,6 @@ class FileClient:
                 offset += 1024
         return True
 
-if __name__ == "__main__":
-    client = FileClient()
-    client.start()
+# if __name__ == "__main__":
+#     client = FileClient()
+#     client.start()
