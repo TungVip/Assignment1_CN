@@ -13,6 +13,7 @@ class FileClient:
         self.hostname = None
         self.stop_threads = False  # Flag to signal threads to terminate
         self.log_callback = log_callback
+        self.client_socket = None
 
     def log(self, message):
         if self.log_callback:
@@ -20,16 +21,20 @@ class FileClient:
         else:
             print(message)
 
-    def start(self, hostname):
+    def login(self, hostname):
         # self.hostname = input("Enter your unique hostname: ")
 
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect((self.server_host, self.server_port))
+        if not self.client_socket:
+            self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.client_socket.connect((self.server_host, self.server_port))
 
         # Send the client's hostname to the server
-        client_adress = self.init_hostname(client_socket, hostname)
+        client_adress = self.init_hostname(self.client_socket, hostname)
 
-        self.receive_messages_thread = threading.Thread(target=self.receive_messages, args=(client_socket,))
+        return client_adress
+        
+    def start(self, client_adress):
+        self.receive_messages_thread = threading.Thread(target=self.receive_messages, args=(self.client_socket,))
         self.receive_messages_thread.start()
 
         # Start the listener thread
@@ -126,16 +131,19 @@ class FileClient:
         self.send_hostname(client_socket)
         data = json.loads(client_socket.recv(1024).decode("utf-8"))
         if not data:
-            return
-        while data["status"] == "error":
-            print(data["message"])
-            self.hostname = input("Enter your unique hostname: ")
-            self.send_hostname(client_socket)
-            data = json.loads(client_socket.recv(1024).decode("utf-8"))
-            if not data:
-                break
-            if data["status"] == "success":
-                break
+            return None
+        # while data["status"] == "error":
+        #     print(data["message"])
+        #     self.hostname = input("Enter your unique hostname: ")
+        #     self.send_hostname(client_socket)
+        #     data = json.loads(client_socket.recv(1024).decode("utf-8"))
+        #     if not data:
+        #         break
+        #     if data["status"] == "success":
+        #         break
+        if data["status"] == "error":
+            self.log(data["message"])
+            return None
         address = data["address"]
         address = (address[0], int(address[1]))
         # self.start_listener(address)
