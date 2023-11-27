@@ -6,7 +6,7 @@ import json
 
 class FileClient:
     def __init__(self, log_callback=None):
-        self.server_host = "localhost"
+        self.server_host = "172.20.10.2"
         self.server_port = 55555
         self.local_files = {}  # {file_name: file_path}
         self.lock = threading.Lock()  # To synchronize access to shared data

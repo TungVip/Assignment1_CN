@@ -96,6 +96,9 @@ class FileClientGUI:
         file_path = self.file_path_entry.get()
         local_name = file_path.split("/")[-1]  # Extracting the file name
         file_name = self.file_name_entry.get()  # Get the second argument (file name)
+        if not file_name or not local_name:
+            self.log(f"Error publishing file: Please fill in the blank!")
+            return
         try:
             publish_status = self.client.publish(self.client.client_socket, local_name, file_name)
             if publish_status:
@@ -105,6 +108,9 @@ class FileClientGUI:
 
     def fetch(self):
         file_name = self.fetch_entry.get()
+        if not file_name:
+            self.log(f"Error fetching file: File name cannot be blank!")
+            return
         try:
             self.client.fetch(self.client.client_socket, file_name)
         except Exception as e:
