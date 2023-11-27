@@ -6,7 +6,7 @@ import json
 
 class FileClient:
     def __init__(self, log_callback=None):
-        self.server_host = "172.20.10.2"
+        self.server_host = "localhost"
         self.server_port = 55555
         self.local_files = {}  # {file_name: file_path}
         self.lock = threading.Lock()  # To synchronize access to shared data
@@ -25,8 +25,13 @@ class FileClient:
         # self.hostname = input("Enter your unique hostname: ")
 
         if not self.client_socket:
-            self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_socket.connect((self.server_host, self.server_port))
+            try:
+                self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.client_socket.connect((self.server_host, self.server_port))
+            except Exception as e:
+                self.log(f"Error connect to server: {e}")
+                self.client_socket = None
+                return None
 
         # Send the client's hostname to the server
         client_adress = self.init_hostname(self.client_socket, hostname)
@@ -34,11 +39,11 @@ class FileClient:
         return client_adress
         
     def start(self, client_adress):
-        self.receive_messages_thread = threading.Thread(target=self.receive_messages, args=(self.client_socket,))
+        self.receive_messages_thread = threading.Thread(target=self.receive_messages, daemon=True, args=(self.client_socket,))
         self.receive_messages_thread.start()
 
         # Start the listener thread
-        self.listener_thread = threading.Thread(target=self.start_listener, args=(client_adress,))
+        self.listener_thread = threading.Thread(target=self.start_listener, daemon=True, args=(client_adress,))
         self.listener_thread.start()
         
         # Command-shell interpreter
@@ -204,7 +209,10 @@ class FileClient:
         self.stop_threads = True  # Set the flag to stop threads
         with self.lock:
             command = "quit"
-            client_socket.send(command.encode("utf-8"))
+            try:
+                client_socket.send(command.encode("utf-8"))
+            except Exception as e:
+                self.log(f"Error connecting to server: {e}")
         client_socket.close()
         if hasattr(self, 'listener_socket'):
             self.listener_socket.close()

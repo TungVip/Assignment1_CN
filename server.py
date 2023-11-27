@@ -37,7 +37,7 @@ class FileServer:
         while self.is_running:
             try:
                 client_socket, client_address = server_socket.accept()
-                threading.Thread(target=self.handle_client, args=(client_socket, client_address)).start()
+                threading.Thread(target=self.handle_client, daemon=True, args=(client_socket, client_address)).start()
             except OSError as e:
                 # Check if the error is due to stopping the server, ignore otherwise
                 if not self.is_running:
@@ -52,7 +52,7 @@ class FileServer:
         if self.is_running:
             self.log(f"New connection from {client_address}")
 
-        while self.clients[client_address]["status"] == "online":
+        while self.clients[client_address]["status"] == "online" and self.is_running:
             try:
                 data = client_socket.recv(1024).decode("utf-8")
                 if not data:
@@ -132,8 +132,8 @@ class FileServer:
             client.update({"status" : "offline"})
         #     if client_address in self.clients:
         #         del self.clients[client_address]
-        #     if client_socket:
-        #         client_socket.close()
+            if client_socket:
+                client_socket.close()
         #     print(f"Connection from {client_address} closed")
         self.log(f"The client {client_address} has quitted")
 
@@ -200,10 +200,14 @@ class FileServer:
     def shutdown(self):
         self.log("Shutting down the server...")
         self.is_running = False
-        # Create a dummy connection to unblock the server from accept, and then close the server socket
-        dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        dummy_socket.connect((self.host, self.port))
-        dummy_socket.close()
+        try:
+            # Create a dummy connection to unblock the server from accept, and then close the server socket
+            dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            dummy_socket.connect((self.host, self.port))
+            dummy_socket.close()
+        except Exception as e:
+            if self.is_running:
+                self.log(f"Error shutdown the server: {e}")
         sys.exit(0)
 
 # if __name__ == "__main__":
