@@ -60,17 +60,17 @@ class FileClient:
                     self.handle_fetch_sources(client_socket, data)
                     # print(data)
                 else:
-                    print(data)
+                    self.log(data)
 
             except ConnectionResetError:
                 # Handle the case where the server closes the connection
-                print("Connection closed by the server.")
+                self.log("Connection closed by the server.")
                 break
 
             except Exception as e:
                 if self.stop_threads:
                     break
-                print(f"Error receiving messages: {e}")
+                self.log(f"Error receiving messages: {e}")
                 break
 
     def start_listener(self, client_adress):
@@ -85,7 +85,7 @@ class FileClient:
             except OSError as e:
                 # Check if the error is due to stopping threads, ignore otherwise
                 if not self.stop_threads:
-                    print(f"Error accepting connection: {e}")
+                    self.log(f"Error accepting connection: {e}")
                     break
 
     def handle_client(self, client_socket, client_address):
@@ -168,10 +168,16 @@ class FileClient:
 
     def publish(self, client_socket, local_name, file_name):
         with self.lock:
+            if local_name in self.local_files.values() or file_name in self.local_files:
+                self.log(f"File with local name '{local_name}' or file name '{file_name}' already exists.")
+                return False
+
             self.local_files[file_name] = local_name
 
         command = f"publish {local_name} {file_name}"
         client_socket.send(command.encode("utf-8"))
+
+        return True
 
     def fetch(self, client_socket, file_name):
         command = f"fetch {file_name}"
@@ -185,15 +191,13 @@ class FileClient:
         address = sources_data["address"]
         address = (address[0], int(address[1]))
 
-        # for source_data in sources_data:
-        #     source_address, source_files = sources_data
-        # print(f"Source: {source_address}, Files: {source_files}")
-
         # Automatically initiate P2P connection to the source
         target_socket = self.p2p_connect(address)
         # print(target_socket)
         if target_socket:
-            self.download_file(target_socket, local_name)
+            fetch_status = self.download_file(target_socket, local_name)
+            if fetch_status == True:
+                self.log("Fetch successfully!")
             target_socket.close()
 
     def quit(self, client_socket):
@@ -201,8 +205,6 @@ class FileClient:
         with self.lock:
             command = "quit"
             client_socket.send(command.encode("utf-8"))
-        # Wait for threads to finish
-        # self.receive_messages_thread.join()
         client_socket.close()
         if hasattr(self, 'listener_socket'):
             self.listener_socket.close()
@@ -220,7 +222,7 @@ class FileClient:
             target_socket.connect(target_address)
             return target_socket
         except Exception as e:
-            print(f"Error connecting to {target_address}: {e}")
+            self.log(f"Error connecting to {target_address}: {e}")
             return None
 
     def download_file(self, target_socket, local_name):

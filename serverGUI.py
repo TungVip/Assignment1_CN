@@ -8,7 +8,7 @@ class ServerGUI:
         self.server = FileServer(host, port, log_callback=self.log_message)
 
         self.root = tk.Tk()
-        self.root.title("File Server GUI")
+        self.root.title("P2P Server GUI")
 
         # Style configuration
         self.root.configure(bg='#6daded')  # Set background color to blue

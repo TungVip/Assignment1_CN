@@ -10,7 +10,7 @@ class FileClientGUI:
         self.client = FileClient(log_callback=self.log)
 
         self.root = tk.Tk()
-        self.root.title("File Server GUI")
+        self.root.title("P2P Client GUI")
 
         # Hostname Frame
         self.hostname_frame = ttk.Frame(self.root)
@@ -97,8 +97,9 @@ class FileClientGUI:
         local_name = file_path.split("/")[-1]  # Extracting the file name
         file_name = self.file_name_entry.get()  # Get the second argument (file name)
         try:
-            self.client.publish(self.client.client_socket, local_name, file_name)
-            self.log(f"Published: {local_name}")
+            publish_status = self.client.publish(self.client.client_socket, local_name, file_name)
+            if publish_status:
+                self.log(f"Published: '{local_name}' as '{file_name}'")
         except Exception as e:
             self.log(f"Error publishing file: {e}")
 
