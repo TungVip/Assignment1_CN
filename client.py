@@ -67,11 +67,11 @@ class FileClient:
                 if not data:
                     break
 
-                if not data["error"]:
+                if data["header"] == "fetch" and data["payload"]["success"]:
                     self.handle_fetch_sources(client_socket, data)
                     # print(data)
                 else:
-                    self.log(data)
+                    self.log(data["payload"]["message"])
 
             except ConnectionResetError:
                 # Handle the case where the server closes the connection
@@ -109,23 +109,48 @@ class FileClient:
                 break
             data = json.loads(raw_data)
             print(data)
-            if data["type"] == "ping":
-                client_socket.send(json.dumps({"type": "pong"}).encode("utf-8"))
+            if data == {"header": "ping", "type": 0}:
+                respond = {
+                    "header": "ping",
+                    "type": 1,
+                    "payload": {
+                    "success": True,
+                    "message": "pong"
+                    }
+                }
+                client_socket.send(json.dumps(respond).encode("utf-8"))
                 client_socket.close()
                 break
+            
+            status = self.send_file(client_socket, data["payload"]["fname"])
 
-            status = self.send_file(client_socket, data["local_name"])
-
-    def send_file(self, client_socket, local_name):
+    def send_file(self, client_socket, fname):
+        local_name = self.local_files[fname]
         if not os.path.exists(local_name) or not os.path.isfile(local_name):
-            reply = {"status": "Error"}
+            reply = {
+                "header": "download",
+                "type": 1,
+                "payload": {
+                "success": False,
+                "message": f"{local_name} is not available",
+                "length": None,
+                }
+            }
             # reply.update({"status" : "Error"})
             self.socket.send(json.dumps(reply).encode())
             raise FileNotFoundError(f"{local_name} is not available")
-        fname = os.path.split(local_name)[-1]
+        # fname = os.path.split(local_name)[-1]
         length = os.path.getsize(local_name)
-        reply = {"status": "available", "length": length, "file": fname}
-        reply.update({"status": "available", "length": length, "file": fname})
+        reply = {
+            "header": "download",
+            "type": 1,
+            "payload": {
+                "success": False,
+                "message": f"{local_name} is available",
+                "length": length,
+                }
+            }
+        # reply.update({"status": "available", "length": length, "file": fname})
         client_socket.send(json.dumps(reply).encode())
         print(f"currently at send file {reply}")
         with open(local_name, "rb") as file:
@@ -151,10 +176,10 @@ class FileClient:
         #         break
         #     if data["status"] == "success":
         #         break
-        if data["status"] == "error":
-            self.log(data["message"])
+        if data["payload"]["success"] == False:
+            self.log(data["payload"]["message"])
             return None
-        address = data["address"]
+        address = data["payload"]["address"]
         address = (address[0], int(address[1]))
         # self.start_listener(address)
         return address
@@ -185,41 +210,49 @@ class FileClient:
                 )
                 return False
 
-            self.local_files[local_name] = file_name
-
         # command = f"publish {local_name} {file_name}"
         command = {
-            "type": "publish",
-            "local_name": local_name,
-            "file_name": file_name,
+            "header": "publish",
+            "type": 0,
+            "payload": {
+                "lname": local_name,
+                "fname": file_name
+            }
         }
         request = json.dumps(command)
-        client_socket.send(request.encode("utf-8"))
-
+        try:
+            client_socket.send(request.encode("utf-8"))
+        except Exception as e:
+            self.log(f"Error publish file to server: {e}")
+            return False
+        self.local_files[file_name] = local_name
         return True
 
     def fetch(self, client_socket, file_name):
         # command = f"fetch {file_name}"
         command = {
-            "type": "fetch",
-            "file_name": file_name,
+            "header": "fetch",
+            "type": 0,
+            "payload": {
+                "fname": file_name
+            }
         }
         request = json.dumps(command)
         client_socket.send(request.encode("utf-8"))
 
     def handle_fetch_sources(self, client_socket, data):
-        sources_data = data["source"]
+        sources_data = data["payload"]
         print(f"{data}")
         print(sources_data)
-        local_name = sources_data["local_name"]
-        address = sources_data["address"]
+        fname = sources_data["fname"]
+        address = sources_data["available_clients"][0]["address"]
         address = (address[0], int(address[1]))
 
         # Automatically initiate P2P connection to the source
         target_socket = self.p2p_connect(address)
         # print(target_socket)
         if target_socket:
-            fetch_status = self.download_file(target_socket, local_name)
+            fetch_status = self.download_file(target_socket, fname)
             if fetch_status is True:
                 self.log("Fetch successfully!")
             target_socket.close()
@@ -244,8 +277,11 @@ class FileClient:
     def send_hostname(self, client_socket):
         # command = f"hostname {self.hostname}"
         command = {
-            "type": "hostname",
-            "hostname": self.hostname,
+            "header": "sethost",
+            "type": 0,
+            "payload": {
+                "hostname": self.hostname,
+            }
         }
         request = json.dumps(command)
         client_socket.send(request.encode("utf-8"))
@@ -260,16 +296,22 @@ class FileClient:
             self.log(f"Error connecting to {target_address}: {e}")
             return None
 
-    def download_file(self, target_socket, local_name):
+    def download_file(self, target_socket, file_name):
         # Implement file download logic here
-        data = {"type": "CONNECT", "action": "request", "local_name": local_name}
+        data = {
+            "header": "download",
+            "type": 0,
+            "payload": {
+                "fname": file_name,
+                }
+            }
         target_socket.send(json.dumps(data).encode("utf-8"))
 
         data = json.loads(target_socket.recv(1024).decode())
         print(f"currently at download file {data}")
-        fname = data["file"] + "_fetch"
-        length = data["length"]
-        if data["status"] == "Error":
+        fname = file_name + "_fetch"
+        length = data["payload"]["length"]
+        if data["payload"]["success"] == False:
             raise ConnectionAbortedError("File is not available")
         with open(os.path.join(self.path, fname), "wb") as file:
             offset = 0
