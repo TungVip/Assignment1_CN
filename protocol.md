@@ -3,7 +3,7 @@
 ## Request schema
 ```{json}
 {
-    "header": "fetch" | "publish" | "download" | "ping",
+    "header": "fetch" | "publish" | "download" | "ping" | "sethost",
     "type": 0,
     "payload": {
         ...
@@ -14,7 +14,7 @@
 ## Response schema
 ```{json}
 {
-    "header": "fetch" | "publish" | "download" | "ping",
+    "header": "fetch" | "publish" | "download" | "ping" | "sethost",
     "type": 1,
     "payload": {
         "success": True | False,
@@ -25,6 +25,32 @@
 ```
 
 ## Scenarios
+### Set host
+#### client -request-> server
+```{json}
+{
+    "header": "sethost",
+    "type": 0,
+    "payload": {
+        "hostname": string,
+    }
+}
+```
+
+#### server -response-> client
+```{json}
+{
+    "header": "sethost",
+    "type": 1,
+    "payload": {
+        "success": True | False,
+        "message": string,
+        "hostname": string,
+        "address": string (client_address),
+    }
+}
+```
+
 ### Publish
 #### client -request-> server
 ```{json}
@@ -32,8 +58,8 @@
     "header": "publish",
     "type": 0,
     "payload": {
-        "local_filename": string,
-        "remote_filename": string
+        "lname": string,
+        "fname": string
     }
 }
 ```
@@ -45,8 +71,8 @@
     "payload": {
         "success": True | False,
         "message": string,
-        "local_filename": string,
-        "remote_filename": string
+        "lname": string,
+        "fname": string
     }
 }
 ```
@@ -78,7 +104,7 @@
     "header": "fetch",
     "type": 0,
     "payload": {
-        "filename": string
+        "fname": string
     }
 }
 ```
@@ -90,8 +116,10 @@
     "payload": {
         "success": True | False,
         "message": string,
+        "fname": string,
         "available_clients": [
             {
+                "hostname": string,
                 "address": string,
             },
             ...
@@ -107,7 +135,7 @@
     "header": "download",
     "type": 0,
     "payload": {
-        "filename": string (use file's name on server),
+        "fname": string (use file's name on server),
     }
 }
 ```

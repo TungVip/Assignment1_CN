@@ -8,19 +8,26 @@ from tkinter import scrolledtext
 
 
 class FileServer:
-    def __init__(self, host, port, log_callback=None):
+    def __init__(self, host, port, log_callback=None, log_request_callback=None):
         self.host = host
         self.port = port
         self.clients = (
             {}
         )  # {client_address: {"hostname": hostname, "files": [list of files]}}
         self.lock = threading.Lock()  # To synchronize access to shared data
-        self.is_running = True  # Flag to control server running state
+        self.is_running = False  # Flag to control server running state
         self.log_callback = log_callback
+        self.log_request_callback = log_request_callback
 
     def log(self, message):
         if self.log_callback:
             self.log_callback(message)
+        else:
+            print(message)
+
+    def log_request(self, message):
+        if self.log_request_callback:
+            self.log_request_callback(message)
         else:
             print(message)
 
@@ -29,13 +36,18 @@ class FileServer:
         server_thread.start()
 
     def run_server(self):
-        self.is_running = True
+        with self.lock:
+            if self.is_running:
+                self.log("Server is already running!")
+                return
+            else:
+                server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                server_socket.bind((self.host, 2701))
+                server_socket.listen(5)
 
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.host, self.port))
-        server_socket.listen()
-
-        self.log(f"Server listening on {self.host}:{self.port}")
+                self.is_running = True
+                self.log(f"Server listening on {self.host}:{self.port}")
 
         while self.is_running:
             try:
@@ -57,7 +69,7 @@ class FileServer:
             self.clients[client_address] = {
                 "hostname": None,
                 "status": "online",
-                "files": [],
+                "files": {},
             }
 
         if self.is_running:
@@ -91,70 +103,98 @@ class FileServer:
                 self.log(f"Connection from {client_address} closed")
 
     def process_command(self, client_socket, client_address, command):
-
         if command["type"] == "publish":
-            self.publish(client_address, command["local_name"], command["file_name"])
+            self.log_request(f">>> Client {client_address}: {command['type']}\n---\n")
+            self.publish(client_address, command["lname"], command["fname"])
         elif command["type"] == "fetch":
-            self.fetch(client_socket, client_address, command["file_name"])
+            self.log_request(f">>> Client {client_address}: {command['type']}\n---\n")
+            self.fetch(client_socket, client_address, command["fname"])
         elif command["type"] == "quit":
+            self.log_request(f">>> Client {client_address}: {command['type']}\n---\n")
             self.quit(client_socket, client_address)
-        elif command["type"] == "hostname":
+        elif command["type"] == "sethost":
+            self.log_request(f">>> Client {client_address}: {command['type']}\n---\n")
             self.set_hostname(client_socket, client_address, command["hostname"])
         else:
-            self.log(f"Unknown command from {client_address}: {command}")
+            self.log_request(f">>> Client {client_address}: Unknown command {command}")
 
     def process_server_command(self, command):
-        command_parts = command.split()
+        with self.lock:
+            if self.is_running:
+                command_parts = command.split()
+                self.log(f"Server$ {command}")
 
-        if not command:
-            self.log("Server command cannot be blank!")
-        elif command_parts[0] == "discover":
-            self.server_discover(command_parts[1])
-        elif command_parts[0] == "ping":
-            self.server_ping(command_parts[1])
-        elif command_parts[0] == "shutdown":
-            self.shutdown()
-        else:
-            self.log(f"Unknown server command: {command}")
+                if not command:
+                    self.log("Server command cannot be blank!")
+                elif command_parts[0] == "discover":
+                    self.server_discover(command_parts[1])
+                elif command_parts[0] == "ping":
+                    self.server_ping(command_parts[1])
+                elif command_parts[0] == "shutdown":
+                    self.shutdown()
+                else:
+                    self.log(f"Unknown server command: {command}")
+            else:
+                self.log("Start the server before sending commands!")
 
-    def publish(self, client_address, local_name, file_name):
+    def publish(self, client_address, lname, fname):
         with self.lock:
             if client_address in self.clients:
                 self.clients[client_address]["files"].append(
-                    {"local_name": local_name, "file_name": file_name}
+                    {"lname": lname, "fname": fname}
                 )
                 self.log(
-                    f"File '{file_name}' published by {client_address} with local name '{local_name}'"
+                    f"File '{fname}' published by {client_address} with local name '{lname}'"
                 )
             else:
                 self.log(f"Unknown client {client_address}")
 
-    def fetch(self, client_socket, requesting_client, file_name):
+    def fetch(self, client_socket, requesting_client, fname):
         with self.lock:
             found_client = next(
                 (
                     (addr, data["files"])
                     for addr, data in self.clients.items()
-                    if any(file["file_name"] == file_name for file in data["files"])
+                    if any(file["fname"] == fname for file in data["files"])
                 ),
                 None,
             )
 
         if found_client:
             addr, files = found_client
-            local_name = next(
-                file["local_name"] for file in files if file["file_name"] == file_name
-            )
+            lname = next(file["fname"] for file in files if file["fname"] == fname)
 
             response_data = {
-                "file_name": file_name,
-                "error": None,
-                "source": {"address": addr, "local_name": local_name},
+                "header": "fetch",
+                "type": 1,
+                "payload": {
+                    "success": True,
+                    "message": f"File '{fname}' found",
+                    "fname": fname,
+                    "lname": lname,
+                    "available_clients": [
+                        {
+                            "hostname": data["hostname"],
+                            "address": addr,
+                        }
+                        for addr, data in self.clients.items()
+                        if addr != requesting_client
+                    ],
+                },
             }
             response = json.dumps(response_data)
             client_socket.send(response.encode("utf-8"))
         else:
-            response_data = {"file_name": file_name, "error": "No sources found"}
+            response_data = {
+                "header": "fetch",
+                "type": 1,
+                "payload": {
+                    "success": False,
+                    "message": f"File '{fname}' not found",
+                    "fname": fname,
+                    "available_clients": [],
+                },
+            }
             response = json.dumps(response_data)
             client_socket.send(response.encode("utf-8"))
 
@@ -169,40 +209,67 @@ class FileServer:
         #     print(f"Connection from {client_address} closed")
         self.log(f"The client {client_address} has quitted")
 
-    def set_hostname(self, client_socket, client_address, hostname):
+    def set_hostname(self, client_socket, client_address, hostname: str):
         with self.lock:
             if client_address in self.clients:
-                if not any(
-                    data["hostname"] == hostname
-                    for addr, data in self.clients.items()
-                    if addr != client_address
-                ):
-                    self.clients[client_address]["hostname"] = hostname
-                    response_data = {
-                        "status": "success",
-                        "message": f"Hostname '{hostname}' set for {client_address}",
-                        "hostname": hostname,
-                        "address": client_address,
-                    }
-                    response = json.dumps(response_data)
-                    self.log(response_data["message"])
+                if " " in hostname:
+                    response = json.dumps(
+                        {
+                            "header": "sethost",
+                            "type": 1,
+                            "payload": {
+                                "success": False,
+                                "message": "Hostname cannot contain spaces",
+                                "hostname": hostname,
+                                "address": client_address,
+                            },
+                        }
+                    )
                     client_socket.send(response.encode("utf-8"))
                 else:
-                    response_data = {
-                        "status": "error",
-                        "message": f"Hostname '{hostname}' is already in use.",
-                        "hostname": None,
-                        "address": None,
-                    }
-                    response = json.dumps(response_data)
-                    self.log(response_data["message"])
-                    client_socket.send(response.encode("utf-8"))
+                    if not any(
+                        data["hostname"] == hostname
+                        for addr, data in self.clients.items()
+                        if addr != client_address
+                    ):
+                        self.clients[client_address]["hostname"] = hostname
+                        response_data = {
+                            "header": "sethost",
+                            "type": 1,
+                            "payload": {
+                                "success": True,
+                                "message": f"Hostname '{hostname}' set for {client_address}",
+                                "hostname": hostname,
+                                "address": client_address,
+                            },
+                        }
+                        response = json.dumps(response_data)
+                        self.log(response_data["message"])
+                        client_socket.send(response.encode("utf-8"))
+                    else:
+                        response_data = {
+                            "header": "sethost",
+                            "type": 1,
+                            "payload": {
+                                "success": False,
+                                "message": f"Hostname '{hostname}' already in use",
+                                "hostname": hostname,
+                                "address": client_address,
+                            },
+                        }
+                        response = json.dumps(response_data)
+                        self.log(response_data["message"])
+                        client_socket.send(response.encode("utf-8"))
             else:
                 response_data = {
-                    "status": "error",
-                    "message": f"Unknown client {client_address}",
-                    "hostname": None,
-                    "address": None,
+                    "header": "sethost",
+                    "type": 1,
+                    "payload": {
+                        "success": False,
+                        "message": f"Unknown client {client_address}",
+                        "hostname": hostname,
+                        "address": client_address,
+                    },
                 }
                 response = json.dumps(response_data)
                 self.log(response_data["message"])
@@ -257,16 +324,17 @@ class FileServer:
                 return f"Unknown client {client_address}"
 
     def shutdown(self):
-        self.log("Shutting down the server...")
-        self.is_running = False
-        try:
-            # Create a dummy connection to unblock the server from accept, and then close the server socket
-            dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            dummy_socket.connect((self.host, self.port))
-            dummy_socket.close()
-        except Exception as e:
-            if self.is_running:
-                self.log(f"Error shutdown the server: {e}")
+        with self.lock:
+            self.log("Shutting down the server...")
+            self.is_running = False
+            try:
+                # Create a dummy connection to unblock the server from accept, and then close the server socket
+                dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                dummy_socket.connect((self.host, self.port))
+                dummy_socket.close()
+            except Exception as e:
+                if self.is_running:
+                    self.log(f"Error shutdown the server: {e}")
         sys.exit(0)
 
 
