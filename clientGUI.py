@@ -42,17 +42,28 @@ class FileClientGUI:
         self.path_button.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
 
         # Log Box
-        self.log_frame = ttk.Frame(self.root)
-        self.log_frame.pack(padx=10, pady=10, side=tk.BOTTOM)
+        self.main_frame = ttk.Frame(self.root)
+        self.main_frame.pack(padx=10, pady=10, side=tk.BOTTOM)
+
+        self.log_frame = ttk.Frame(self.main_frame)
+        self.log_frame.pack(side=tk.LEFT)
+
+        label_log = ttk.Label(self.log_frame, text="Logs")
+        label_log.pack(pady=10)
 
         self.log_box = scrolledtext.ScrolledText(
             self.log_frame, wrap=tk.WORD, width=60, height=20, state=tk.DISABLED
         )
         self.log_box.pack(padx=10, pady=10, side=tk.LEFT, expand=True)
-        self.log("Welcome to P2P File Sharing System!\n" "Please choose a path")
+
+        self.repo_frame = ttk.Frame(self.main_frame)
+        self.repo_frame.pack_forget()
+
+        self.label_repo = ttk.Label(self.repo_frame, text="My Repository")
+        self.label_repo.pack(pady=10)
 
         self.repo_box = tk.Text(
-            self.log_frame,
+            self.repo_frame,
             wrap=tk.WORD,
             width=40,
             height=20,
@@ -112,7 +123,6 @@ class FileClientGUI:
         if path != "":
             self.client.path = path
             self.path_frame.pack_forget()
-            self.log("Please enter your name")
             self.hostname_frame.pack(padx=10, pady=10, side=tk.TOP)
 
     def init_hostname(self):
@@ -129,7 +139,9 @@ class FileClientGUI:
                     # Show the main commands frame
                     self.hostname_frame.pack_forget()
                     self.commands_frame.pack(side=tk.BOTTOM, expand=True)
-                    self.log_frame.pack(side=tk.TOP)
+                    self.main_frame.pack(side=tk.TOP)
+                    self.repo_frame.pack(side=tk.RIGHT)
+                    self.process_file()
             except Exception as e:
                 self.log(f"Error setting hostname: {e}")
         else:
@@ -138,10 +150,13 @@ class FileClientGUI:
     def browse_file(self):
         file_path = filedialog.askopenfilename(initialdir=self.client.path)
         if file_path != "":
-            self.file_path_entry.config(state="normal")
-            self.file_path_entry.delete(0, tk.END)
-            self.file_path_entry.insert(0, file_path)
-            self.file_path_entry.config(state="disabled")
+            if os.path.dirname(file_path) == self.client.path:
+                self.file_path_entry.config(state="normal")
+                self.file_path_entry.delete(0, tk.END)
+                self.file_path_entry.insert(0, file_path)
+                self.file_path_entry.config(state="disabled")
+            else:
+                self.log(f"Choose file in the {self.client.path} directory!")
 
     def publish(self):
         file_path = self.file_path_entry.get()
@@ -156,6 +171,10 @@ class FileClientGUI:
             )
             if publish_status:
                 self.log(f"Published: '{local_name}' as '{file_name}'")
+                self.file_path_entry.config(state=tk.NORMAL)
+                self.file_path_entry.delete("0", tk.END)
+                self.file_path_entry.config(state=tk.DISABLED)
+                self.file_name_entry.delete("0", tk.END)
         except Exception as e:
             self.log(f"Error publishing file: {e}")
 
@@ -166,6 +185,7 @@ class FileClientGUI:
             return
         try:
             self.client.fetch(self.client.client_socket, file_name)
+            self.fetch_entry.delete("1", tk.END)
         except Exception as e:
             self.log(f"Error fetching file: {e}")
 
@@ -183,23 +203,24 @@ class FileClientGUI:
         self.repo_box.config(state=tk.NORMAL)
         self.repo_box.delete("1.0", tk.END)
 
-        if self.path is not None:
+        if self.client.path is not None:
             files = [
                 file
-                for file in os.listdir(self.path)
-                if os.path.isfile(os.path.join(self.path, file))
+                for file in os.listdir(self.client.path)
+                if os.path.isfile(os.path.join(self.client.path, file))
             ]
 
-            self.repo_box.insert(tk.END, f"Current directory: {self.path}\r\n")
+            self.repo_box.insert(tk.END, f"Current directory: {self.client.path}\r\n")
 
             for file in files:
-                if file in self.client.files and self.client.files[file] is not None:
+                if file in self.client.local_files and self.client.local_files[file] is not None:
                     self.repo_box.insert(
-                        tk.END, f"\t\n{file} - {self.client.files[file]}"
+                        tk.END, f"\t\n{file} - {self.client.local_files[file]}"
                     )
                 else:
                     self.repo_box.insert(tk.END, f"\t\n{file} (not published)")
 
+        self.repo_box.config(state=tk.DISABLED)
         self.root.after(1000, self.process_file)
 
 

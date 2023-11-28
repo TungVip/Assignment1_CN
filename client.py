@@ -140,7 +140,6 @@ class FileClient:
         self.hostname = hostname
         self.send_hostname(client_socket)
         data = json.loads(client_socket.recv(1024).decode("utf-8"))
-        self.log(f"{data}")
         if not data:
             return None
         # while data["status"] == "error":
@@ -179,14 +178,14 @@ class FileClient:
 
     def publish(self, client_socket, local_name, file_name):
         with self.lock:
-            if local_name in self.local_files.values() or file_name in self.local_files:
+            if local_name in self.local_files or file_name in self.local_files.values():
                 self.log(
                     f"File with local name '{local_name}'"
                     "or file name '{file_name}' already exists."
                 )
                 return False
 
-            self.local_files[file_name] = local_name
+            self.local_files[local_name] = file_name
 
         command = f"publish {local_name} {file_name}"
         client_socket.send(command.encode("utf-8"))
@@ -253,7 +252,7 @@ class FileClient:
         length = data["length"]
         if data["status"] == "Error":
             raise ConnectionAbortedError("File is not available")
-        with open(os.path.join(os.getcwd(), fname), "wb") as file:
+        with open(os.path.join(self.path, fname), "wb") as file:
             offset = 0
             while offset < length:
                 recved = target_socket.recv(1024)
