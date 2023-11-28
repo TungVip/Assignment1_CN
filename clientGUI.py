@@ -1,20 +1,22 @@
+import os
 import tkinter as tk
-from tkinter import ttk
-from tkinter import scrolledtext
-from tkinter import filedialog
-import threading
+from tkinter import filedialog, scrolledtext, ttk
+
 from client import FileClient
+
 
 class FileClientGUI:
     def __init__(self):
         self.client = FileClient(log_callback=self.log)
+        self.path = None
+        self.files = None
 
         self.root = tk.Tk()
         self.root.title("P2P Client GUI")
 
         # Hostname Frame
         self.hostname_frame = ttk.Frame(self.root)
-        self.hostname_frame.pack(padx=10, pady=10)
+        self.hostname_frame.pack_forget()
 
         hostname_label = ttk.Label(self.hostname_frame, text="Hostname:")
         hostname_label.grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
@@ -22,12 +24,43 @@ class FileClientGUI:
         self.hostname_entry = ttk.Entry(self.hostname_frame)
         self.hostname_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
 
-        init_hostname_button = ttk.Button(self.hostname_frame, text="Submit", command=self.init_hostname)
+        init_hostname_button = ttk.Button(
+            self.hostname_frame, text="Submit", command=self.init_hostname
+        )
         init_hostname_button.grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
 
+        # Path Frame
+        self.path_frame = ttk.Frame(self.root)
+        self.path_frame.pack(padx=10, pady=10, side=tk.TOP)
+
+        path_label = ttk.Label(self.path_frame, text="Choose Path:")
+        path_label.grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+
+        self.path_button = ttk.Button(
+            self.path_frame, text="Browse", command=self.init_path
+        )
+        self.path_button.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+
         # Log Box
-        self.log_box = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, width=60, height=10)
-        self.log_box.pack(padx=10, pady=10)
+        self.log_frame = ttk.Frame(self.root)
+        self.log_frame.pack(padx=10, pady=10, side=tk.BOTTOM)
+
+        self.log_box = scrolledtext.ScrolledText(
+            self.log_frame, wrap=tk.WORD, width=60, height=20, state=tk.DISABLED
+        )
+        self.log_box.pack(padx=10, pady=10, side=tk.LEFT, expand=True)
+        self.log("Welcome to P2P File Sharing System!\n" "Please choose a path")
+
+        self.repo_box = tk.Text(
+            self.log_frame,
+            wrap=tk.WORD,
+            width=40,
+            height=20,
+            state=tk.DISABLED,
+            bg="white",
+            fg="black",
+        )
+        self.repo_box.pack(padx=10, pady=10, side=tk.RIGHT, expand=True)
 
         # Commands Frame (Initially hidden)
         self.commands_frame = ttk.Frame(self.root)
@@ -44,14 +77,18 @@ class FileClientGUI:
         self.file_path_entry = ttk.Entry(self.commands_frame, state="readonly")
         self.file_path_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
 
-        browse_button = ttk.Button(self.commands_frame, text="Browse", command=self.browse_file)
+        browse_button = ttk.Button(
+            self.commands_frame, text="Browse", command=self.browse_file
+        )
         browse_button.grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
 
         # New Entry for the second argument (file name)
         self.file_name_entry = ttk.Entry(self.commands_frame)
         self.file_name_entry.grid(row=0, column=3, padx=5, pady=5, sticky=tk.W)
 
-        publish_button = ttk.Button(self.commands_frame, text="Publish", command=self.publish)
+        publish_button = ttk.Button(
+            self.commands_frame, text="Publish", command=self.publish
+        )
         publish_button.grid(row=0, column=4, padx=5, pady=5, sticky=tk.W)
 
         # Fetch Section
@@ -65,42 +102,58 @@ class FileClientGUI:
         fetch_button.grid(row=1, column=2, padx=5, pady=5, sticky=tk.W)
 
         # Quit Button
-        quit_button = ttk.Button(self.commands_frame, text="Quit", command=self.quit_client)
+        quit_button = ttk.Button(
+            self.commands_frame, text="Quit", command=self.quit_client
+        )
         quit_button.grid(row=2, column=0, columnspan=5, pady=10)
+
+    def init_path(self):
+        path = filedialog.askdirectory()
+        if path != "":
+            self.client.path = path
+            self.path_frame.pack_forget()
+            self.log("Please enter your name")
+            self.hostname_frame.pack(padx=10, pady=10, side=tk.TOP)
 
     def init_hostname(self):
         hostname = self.hostname_entry.get()
         if hostname:
             try:
                 client_address = self.client.login(hostname)
+                self.log(f"Client address: {client_address}")
                 if client_address:
                     self.log(f"Hostname '{hostname}' set successfully.")
-                    # threading.Thread(target=self.client.start, args=(client_address,)).start()
+                    # threading.Thread(target=self.client.start,
+                    # args=(client_address,)).start()
                     self.client.start(client_address)
                     # Show the main commands frame
                     self.hostname_frame.pack_forget()
-                    self.commands_frame.pack()
+                    self.commands_frame.pack(side=tk.BOTTOM, expand=True)
+                    self.log_frame.pack(side=tk.TOP)
             except Exception as e:
                 self.log(f"Error setting hostname: {e}")
         else:
             self.log("Hostname cannot be empty.")
 
     def browse_file(self):
-        file_path = filedialog.askopenfilename()
-        self.file_path_entry.config(state="normal")
-        self.file_path_entry.delete(0, tk.END)
-        self.file_path_entry.insert(0, file_path)
-        self.file_path_entry.config(state="readonly")
+        file_path = filedialog.askopenfilename(initialdir=self.client.path)
+        if file_path != "":
+            self.file_path_entry.config(state="normal")
+            self.file_path_entry.delete(0, tk.END)
+            self.file_path_entry.insert(0, file_path)
+            self.file_path_entry.config(state="disabled")
 
     def publish(self):
         file_path = self.file_path_entry.get()
         local_name = file_path.split("/")[-1]  # Extracting the file name
         file_name = self.file_name_entry.get()  # Get the second argument (file name)
         if not file_name or not local_name:
-            self.log(f"Error publishing file: Please fill in the blank!")
+            self.log("Error publishing file: Please fill in the blank!")
             return
         try:
-            publish_status = self.client.publish(self.client.client_socket, local_name, file_name)
+            publish_status = self.client.publish(
+                self.client.client_socket, local_name, file_name
+            )
             if publish_status:
                 self.log(f"Published: '{local_name}' as '{file_name}'")
         except Exception as e:
@@ -109,7 +162,7 @@ class FileClientGUI:
     def fetch(self):
         file_name = self.fetch_entry.get()
         if not file_name:
-            self.log(f"Error fetching file: File name cannot be blank!")
+            self.log("Error fetching file: File name cannot be blank!")
             return
         try:
             self.client.fetch(self.client.client_socket, file_name)
@@ -121,8 +174,33 @@ class FileClientGUI:
         self.root.destroy()
 
     def log(self, message):
+        self.log_box.config(state=tk.NORMAL)
         self.log_box.insert(tk.END, message + "\n")
         self.log_box.see(tk.END)
+        self.log_box.config(state=tk.DISABLED)
+
+    def process_file(self):
+        self.repo_box.config(state=tk.NORMAL)
+        self.repo_box.delete("1.0", tk.END)
+
+        if self.path is not None:
+            files = [
+                file
+                for file in os.listdir(self.path)
+                if os.path.isfile(os.path.join(self.path, file))
+            ]
+
+            self.repo_box.insert(tk.END, f"Current directory: {self.path}\r\n")
+
+            for file in files:
+                if file in self.client.files and self.client.files[file] is not None:
+                    self.repo_box.insert(
+                        tk.END, f"\t\n{file} - {self.client.files[file]}"
+                    )
+                else:
+                    self.repo_box.insert(tk.END, f"\t\n{file} (not published)")
+
+        self.root.after(1000, self.process_file)
 
 
 if __name__ == "__main__":

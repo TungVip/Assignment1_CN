@@ -1,16 +1,19 @@
-import socket
-import threading
-import os
-import sys
 import json
+import os
+import socket
+import sys
+import threading
 import tkinter as tk
 from tkinter import scrolledtext
+
 
 class FileServer:
     def __init__(self, host, port, log_callback=None):
         self.host = host
         self.port = port
-        self.clients = {}  # {client_address: {"hostname": hostname, "files": [list of files]}}
+        self.clients = (
+            {}
+        )  # {client_address: {"hostname": hostname, "files": [list of files]}}
         self.lock = threading.Lock()  # To synchronize access to shared data
         self.is_running = True  # Flag to control server running state
         self.log_callback = log_callback
@@ -37,7 +40,11 @@ class FileServer:
         while self.is_running:
             try:
                 client_socket, client_address = server_socket.accept()
-                threading.Thread(target=self.handle_client, daemon=True, args=(client_socket, client_address)).start()
+                threading.Thread(
+                    target=self.handle_client,
+                    daemon=True,
+                    args=(client_socket, client_address),
+                ).start()
             except OSError as e:
                 # Check if the error is due to stopping the server, ignore otherwise
                 if not self.is_running:
@@ -47,7 +54,11 @@ class FileServer:
 
     def handle_client(self, client_socket, client_address):
         with self.lock:
-            self.clients[client_address] = {"hostname": None,"status": "online", "files": []}
+            self.clients[client_address] = {
+                "hostname": None,
+                "status": "online",
+                "files": [],
+            }
 
         if self.is_running:
             self.log(f"New connection from {client_address}")
@@ -105,20 +116,37 @@ class FileServer:
     def publish(self, client_address, local_name, file_name):
         with self.lock:
             if client_address in self.clients:
-                self.clients[client_address]["files"].append({"local_name": local_name, "file_name": file_name})
-                self.log(f"File '{file_name}' published by {client_address} with local name '{local_name}'")
+                self.clients[client_address]["files"].append(
+                    {"local_name": local_name, "file_name": file_name}
+                )
+                self.log(
+                    f"File '{file_name}' published by {client_address} with local name '{local_name}'"
+                )
             else:
                 self.log(f"Unknown client {client_address}")
 
     def fetch(self, client_socket, requesting_client, file_name):
         with self.lock:
-            found_client = next(((addr, data["files"]) for addr, data in self.clients.items() if any(file["file_name"] == file_name for file in data["files"])), None)
-    
+            found_client = next(
+                (
+                    (addr, data["files"])
+                    for addr, data in self.clients.items()
+                    if any(file["file_name"] == file_name for file in data["files"])
+                ),
+                None,
+            )
+
         if found_client:
             addr, files = found_client
-            local_name = next(file["local_name"] for file in files if file["file_name"] == file_name)
-    
-            response_data = {"file_name": file_name, "error": None, "source": {"address": addr, "local_name": local_name}}
+            local_name = next(
+                file["local_name"] for file in files if file["file_name"] == file_name
+            )
+
+            response_data = {
+                "file_name": file_name,
+                "error": None,
+                "source": {"address": addr, "local_name": local_name},
+            }
             response = json.dumps(response_data)
             client_socket.send(response.encode("utf-8"))
         else:
@@ -129,9 +157,9 @@ class FileServer:
     def quit(self, client_socket, client_address):
         with self.lock:
             client = self.clients[client_address]
-            client.update({"status" : "offline"})
-        #     if client_address in self.clients:
-        #         del self.clients[client_address]
+            client.update({"status": "offline"})
+            #     if client_address in self.clients:
+            #         del self.clients[client_address]
             if client_socket:
                 client_socket.close()
         #     print(f"Connection from {client_address} closed")
@@ -140,26 +168,49 @@ class FileServer:
     def set_hostname(self, client_socket, client_address, hostname):
         with self.lock:
             if client_address in self.clients:
-                if not any(data["hostname"] == hostname for addr, data in self.clients.items() if addr != client_address):
+                if not any(
+                    data["hostname"] == hostname
+                    for addr, data in self.clients.items()
+                    if addr != client_address
+                ):
                     self.clients[client_address]["hostname"] = hostname
-                    response_data = {"status": "success", "message": f"Hostname '{hostname}' set for {client_address}", "hostname": hostname, "address": client_address}
+                    response_data = {
+                        "status": "success",
+                        "message": f"Hostname '{hostname}' set for {client_address}",
+                        "hostname": hostname,
+                        "address": client_address,
+                    }
                     response = json.dumps(response_data)
                     self.log(response_data["message"])
                     client_socket.send(response.encode("utf-8"))
                 else:
-                    response_data = {"status": "error", "message": f"Hostname '{hostname}' is already in use.", "hostname": None, "address": None}
+                    response_data = {
+                        "status": "error",
+                        "message": f"Hostname '{hostname}' is already in use.",
+                        "hostname": None,
+                        "address": None,
+                    }
                     response = json.dumps(response_data)
                     self.log(response_data["message"])
                     client_socket.send(response.encode("utf-8"))
             else:
-                response_data = {"status": "error", "message": f"Unknown client {client_address}", "hostname": None, "address": None}
+                response_data = {
+                    "status": "error",
+                    "message": f"Unknown client {client_address}",
+                    "hostname": None,
+                    "address": None,
+                }
                 response = json.dumps(response_data)
                 self.log(response_data["message"])
                 client_socket.send(response.encode("utf-8"))
 
     def server_discover(self, hostname):
         with self.lock:
-            found_clients = {addr: data["files"] for addr, data in self.clients.items() if data["hostname"] == hostname}
+            found_clients = {
+                addr: data["files"]
+                for addr, data in self.clients.items()
+                if data["hostname"] == hostname
+            }
 
         if found_clients:
             response = f"Files on hosts with hostname '{hostname}': {found_clients}"
@@ -170,7 +221,11 @@ class FileServer:
 
     def server_ping(self, hostname):
         with self.lock:
-            found_clients = {addr: data["files"] for addr, data in self.clients.items() if data["hostname"] == hostname}
+            found_clients = {
+                addr: data["files"]
+                for addr, data in self.clients.items()
+                if data["hostname"] == hostname
+            }
 
         if found_clients:
             for client_address in found_clients:
@@ -209,6 +264,7 @@ class FileServer:
             if self.is_running:
                 self.log(f"Error shutdown the server: {e}")
         sys.exit(0)
+
 
 # if __name__ == "__main__":
 #     server = FileServer("localhost", 5555)
