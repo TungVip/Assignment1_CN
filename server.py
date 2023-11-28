@@ -311,7 +311,7 @@ class FileServer:
                 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
                     client_socket.connect(client_address)
-                    ping_message = {"type": "ping", "error": None}
+                    ping_message = {"header": "ping", "type": 0}
                     client_socket.send(json.dumps(ping_message).encode("utf-8"))
 
                     response_data = client_socket.recv(1024).decode("utf-8")
