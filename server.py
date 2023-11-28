@@ -69,6 +69,11 @@ class FileServer:
                 if not data:
                     break
 
+                try:
+                    data = json.loads(data)
+                except Exception as e:
+                    self.log(f"Error receiving command: {e}")
+
                 self.process_command(client_socket, client_address, data)
 
             except Exception as e:
@@ -86,16 +91,15 @@ class FileServer:
                 self.log(f"Connection from {client_address} closed")
 
     def process_command(self, client_socket, client_address, command):
-        command_parts = command.split()
 
-        if command_parts[0] == "publish":
-            self.publish(client_address, command_parts[1], command_parts[2])
-        elif command_parts[0] == "fetch":
-            self.fetch(client_socket, client_address, command_parts[1])
-        elif command_parts[0] == "quit":
+        if command["type"] == "publish":
+            self.publish(client_address, command["local_name"], command["file_name"])
+        elif command["type"] == "fetch":
+            self.fetch(client_socket, client_address, command["file_name"])
+        elif command["type"] == "quit":
             self.quit(client_socket, client_address)
-        elif command_parts[0] == "hostname":
-            self.set_hostname(client_socket, client_address, command_parts[1])
+        elif command["type"] == "hostname":
+            self.set_hostname(client_socket, client_address, command["hostname"])
         else:
             self.log(f"Unknown command from {client_address}: {command}")
 

@@ -7,7 +7,7 @@ import threading
 
 class FileClient:
     def __init__(self, log_callback=None):
-        self.server_host = "192.168.43.147"
+        self.server_host = "localhost"
         self.server_port = 55555
         self.local_files = {}  # {file_name: file_path}
         self.lock = threading.Lock()  # To synchronize access to shared data
@@ -181,20 +181,31 @@ class FileClient:
             if local_name in self.local_files or file_name in self.local_files.values():
                 self.log(
                     f"File with local name '{local_name}'"
-                    "or file name '{file_name}' already exists."
+                    f" or file name '{file_name}' already exists."
                 )
                 return False
 
             self.local_files[local_name] = file_name
 
-        command = f"publish {local_name} {file_name}"
-        client_socket.send(command.encode("utf-8"))
+        # command = f"publish {local_name} {file_name}"
+        command = {
+            "type": "publish",
+            "local_name": local_name,
+            "file_name": file_name,
+        }
+        request = json.dumps(command)
+        client_socket.send(request.encode("utf-8"))
 
         return True
 
     def fetch(self, client_socket, file_name):
-        command = f"fetch {file_name}"
-        client_socket.send(command.encode("utf-8"))
+        # command = f"fetch {file_name}"
+        command = {
+            "type": "fetch",
+            "file_name": file_name,
+        }
+        request = json.dumps(command)
+        client_socket.send(request.encode("utf-8"))
 
     def handle_fetch_sources(self, client_socket, data):
         sources_data = data["source"]
@@ -216,9 +227,12 @@ class FileClient:
     def quit(self, client_socket):
         self.stop_threads = True  # Set the flag to stop threads
         with self.lock:
-            command = "quit"
+            command = {
+                "type": "quit",
+            }
             try:
-                client_socket.send(command.encode("utf-8"))
+                request = json.dumps(command)
+                client_socket.send(request.encode("utf-8"))
             except Exception as e:
                 self.log(f"Error connecting to server: {e}")
         client_socket.close()
@@ -228,8 +242,13 @@ class FileClient:
         sys.exit(0)
 
     def send_hostname(self, client_socket):
-        command = f"hostname {self.hostname}"
-        client_socket.send(command.encode("utf-8"))
+        # command = f"hostname {self.hostname}"
+        command = {
+            "type": "hostname",
+            "hostname": self.hostname,
+        }
+        request = json.dumps(command)
+        client_socket.send(request.encode("utf-8"))
 
     def p2p_connect(self, target_address):
         try:
