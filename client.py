@@ -333,7 +333,7 @@ class FileClient:
         }
         target_socket.sendall(json.dumps(data).encode("utf-8", "replace"))
 
-        response_length = int(target_socket.recv(8).decode("utf-8", "replace"))
+        response_length = int.from_bytes(target_socket.recv(8), "big")
         recved_data = target_socket.recv(response_length).decode("utf-8", "replace")
 
         data = json.loads(recved_data)
@@ -352,6 +352,11 @@ class FileClient:
                 offset = 0
                 while offset < length:
                     recved = target_socket.recv(1024)
+
+                    if not recved:
+                        self.log("Connection closed by peer.")
+                        return False
+
                     file.write(recved)
                     offset += 1024
                     self.log(f"Received {offset} bytes of data...")
