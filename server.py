@@ -327,7 +327,6 @@ class FileServer:
         Args:
             hostname (str): The hostname to search for
         """
-        print(self.clients)
         found_client = None
         for addr, data in self.clients.items():
             if data["hostname"] == hostname:
