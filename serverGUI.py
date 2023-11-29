@@ -3,10 +3,9 @@ import threading
 import tkinter as tk
 from tkinter import scrolledtext
 
-from server import FileServer
-
-
 from tkmacosx import Button
+
+from server import FileServer
 
 
 class ServerGUI:
@@ -149,5 +148,5 @@ class ServerGUI:
 
 
 if __name__ == "__main__":
-    gui = ServerGUI("localhost", 55555)  # 192.168.1.247
+    gui = ServerGUI("localhost", 2701)  # 192.168.1.247
     gui.root.mainloop()

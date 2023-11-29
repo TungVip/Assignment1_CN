@@ -62,10 +62,10 @@ class FileClientGUI:
         self.label_repo = ttk.Label(self.repo_frame, text="My Repository")
         self.label_repo.pack(pady=10)
 
-        self.repo_box = tk.Text(
+        self.repo_box = scrolledtext.ScrolledText(
             self.repo_frame,
             wrap=tk.WORD,
-            width=40,
+            width=60,
             height=20,
             state=tk.DISABLED,
             bg="white",
@@ -123,6 +123,11 @@ class FileClientGUI:
         if path != "":
             self.client.path = path
             self.path_frame.pack_forget()
+            self.files = {
+                file: False
+                for file in os.listdir(self.client.path)
+                if os.path.isfile(os.path.join(self.client.path, file))
+            }
             self.hostname_frame.pack(padx=10, pady=10, side=tk.TOP)
 
     def init_hostname(self):
@@ -141,7 +146,7 @@ class FileClientGUI:
                     self.commands_frame.pack(side=tk.BOTTOM, expand=True)
                     self.main_frame.pack(side=tk.TOP)
                     self.repo_frame.pack(side=tk.RIGHT)
-                    self.process_file()
+                    self.process_file(first_time=True)
             except Exception as e:
                 self.log(f"Error setting hostname: {e}")
         else:
@@ -170,11 +175,10 @@ class FileClientGUI:
                 self.client.client_socket, local_name, file_name
             )
             if publish_status:
-                self.log(f"Published: '{local_name}' as '{file_name}'")
                 self.file_path_entry.config(state=tk.NORMAL)
-                self.file_path_entry.delete("0", tk.END)
+                self.file_path_entry.delete(0, tk.END)
                 self.file_path_entry.config(state=tk.DISABLED)
-                self.file_name_entry.delete("0", tk.END)
+                self.file_name_entry.delete(0, tk.END)
         except Exception as e:
             self.log(f"Error publishing file: {e}")
 
@@ -185,7 +189,7 @@ class FileClientGUI:
             return
         try:
             self.client.fetch(self.client.client_socket, file_name)
-            self.fetch_entry.delete("1", tk.END)
+            self.fetch_entry.delete(0, tk.END)
         except Exception as e:
             self.log(f"Error fetching file: {e}")
 
@@ -199,29 +203,55 @@ class FileClientGUI:
         self.log_box.see(tk.END)
         self.log_box.config(state=tk.DISABLED)
 
-    def process_file(self):
-        self.repo_box.config(state=tk.NORMAL)
-        self.repo_box.delete("1.0", tk.END)
-
+    def process_file(self, first_time=False):
         if self.client.path is not None:
-            files = [
+            new_files = [
+                file
+                for file in list(self.client.local_files.keys())
+                if self.files[file] is False
+            ]
+            dir_unchange = list(self.files.keys()) == [
                 file
                 for file in os.listdir(self.client.path)
                 if os.path.isfile(os.path.join(self.client.path, file))
             ]
+            publish_unchange = (
+                len(list(self.client.local_files.keys())) == 0 or len(new_files) == 0
+            )
 
-            self.repo_box.insert(tk.END, f"Current directory: {self.client.path}\r\n")
+            if first_time is True or dir_unchange is False or publish_unchange is False:
+                self.repo_box.config(state=tk.NORMAL)
+                self.repo_box.delete("1.0", tk.END)
+                self.files = {
+                    file: False
+                    for file in os.listdir(self.client.path)
+                    if os.path.isfile(os.path.join(self.client.path, file))
+                }
 
-            for file in files:
-                if file in self.client.local_files and self.client.local_files[file] is not None:
-                    self.repo_box.insert(
-                        tk.END, f"\t\n{file} - {self.client.local_files[file]}"
-                    )
-                else:
-                    self.repo_box.insert(tk.END, f"\t\n{file} (not published)")
+                self.repo_box.insert(
+                    tk.END, f"Current directory: {self.client.path}\r\n"
+                )
 
-        self.repo_box.config(state=tk.DISABLED)
-        self.root.after(1000, self.process_file)
+                all_files = list(self.files.keys())
+                all_files.sort()
+                for file in all_files:
+                    if (
+                        file in self.client.local_files
+                        and self.client.local_files[file] is not None
+                    ):
+                        self.repo_box.insert(
+                            tk.END,
+                            f"\n{file[:25] + '...' if len(file) > 25 else file} - {self.client.local_files[file]}",
+                        )
+                        self.files[file] = True
+                    else:
+                        self.repo_box.insert(
+                            tk.END,
+                            f"\n{file[:35] + '...' if len(file) > 35 else file} (not published)",
+                        )
+                self.repo_box.config(state=tk.DISABLED)
+
+        self.root.after(5000, self.process_file)
 
 
 if __name__ == "__main__":
