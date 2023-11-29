@@ -332,14 +332,19 @@ class FileServer:
         Args:
             hostname (str): The hostname to search for
         """
-        found_clients = [
+        print(self.clients)
+        found_files = [
             data["files"]
-            for data in self.clients.items()
+            for _, data in self.clients.items()
             if data["hostname"] == hostname
-        ]
+        ][0]
 
-        if found_clients:
-            response = f"Files on hosts with hostname '{hostname}': {found_clients}"
+        if len(found_files) > 0:
+            response = f"Files on hosts with hostname '{hostname}':\n"
+            for file_dict in found_files:
+                values = list(file_dict.values())
+                response += f"\t{values[0]} -> {values[1]}\n"
+
         else:
             response = f"No hosts found with hostname '{hostname}'"
 
