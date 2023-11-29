@@ -79,6 +79,7 @@ class FileClientGUI:
         self.commands_frame.pack_forget()
 
         self.create_commands_widgets()
+        self.root.protocol("WM_DELETE_WINDOW", self.quit_client)
 
     def create_commands_widgets(self):
         # Publish Section

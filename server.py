@@ -143,11 +143,6 @@ class FileServer:
                     f">>> Client {client_address}: {command['header'].upper()}\n---\n"
                 )
                 self.fetch(client_socket, client_address, command["payload"]["fname"])
-            elif command["header"] == "quit":
-                self.log_request(
-                    f">>> Client {client_address}: {command['header'].upper()}\n---\n"
-                )
-                self.quit(client_socket, client_address)
             elif command["header"] == "sethost":
                 self.log_request(
                     f">>> Client {client_address}: {command['header'].upper()}\n---\n"
@@ -257,19 +252,6 @@ class FileServer:
             }
             response = json.dumps(response_data)
             client_socket.send(response.encode("utf-8", "replace"))
-
-    def quit(self, client_socket, client_address):
-        """Stop the connection with the client
-
-        Args:
-            client_socket (socket): the client' socket
-            client_address (tuple[str, int]): the client's address
-        """
-        client = self.clients[client_address]
-        client.update({"status": "offline"})
-        if client_socket:
-            client_socket.close()
-        self.log(f"The client {client_address} has quitted")
 
     def set_hostname(self, client_socket, client_address, hostname: str):
         """Set the hostname for a client

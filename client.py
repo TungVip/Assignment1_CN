@@ -343,15 +343,6 @@ class FileClient:
             client_socket (socket): the client' socket
         """
         self.stop_threads = True
-        with self.lock:
-            command = {
-                "type": "quit",
-            }
-            try:
-                request = json.dumps(command)
-                client_socket.sendall(request.encode("utf-8", "replace"))
-            except Exception as e:
-                self.log(f"Error connecting to server: {e}")
         client_socket.close()
         if hasattr(self, "listener_socket"):
             self.listener_socket.close()
