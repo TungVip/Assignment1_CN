@@ -167,7 +167,11 @@ class FileClient:
         """
         local_name = [
             file for file in self.local_files if self.local_files[file] == fname
-        ][0]
+        ]
+        if local_name:
+            local_name = local_name[0]
+        else:
+            local_name = None
         if not os.path.exists(
             os.path.join(self.path, local_name)
         ) or not os.path.isfile(os.path.join(self.path, local_name)):

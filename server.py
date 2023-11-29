@@ -193,7 +193,7 @@ class FileServer:
             )
             self.log(
                 f"File '{fname}' published by {client_address}"
-                "with local name '{lname}'"
+                f"with local name '{lname}'"
             )
         else:
             self.log(f"Unknown client {client_address}")
@@ -210,7 +210,7 @@ class FileServer:
             (
                 (addr, data["files"])
                 for addr, data in self.clients.items()
-                if any(file["fname"] == fname for file in data["files"])
+                if any(file["fname"] == fname for file in data["files"]) and addr != requesting_client
             ),
             None,
         )
@@ -333,6 +333,11 @@ class FileServer:
             hostname (str): The hostname to search for
         """
         print(self.clients)
+        found_client = None
+        for addr, data in self.clients.items():
+            if data["hostname"] == hostname:
+                found_client = addr
+                break
         found_files = [
             data["files"]
             for _, data in self.clients.items()
@@ -345,6 +350,8 @@ class FileServer:
                 values = list(file_dict.values())
                 response += f"\t{values[0]} -> {values[1]}\n"
 
+        elif found_client:
+            response = f"No files on hosts with hostname '{hostname}'\n"
         else:
             response = f"No hosts found with hostname '{hostname}'"
 
