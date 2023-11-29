@@ -4,6 +4,7 @@ import socket
 import sys
 import threading
 import time
+from typing import Any
 
 
 class FileServer:
@@ -206,19 +207,14 @@ class FileServer:
             requesting_client (tuple[str, int]): Client's address
             fname (str): file's name on the server
         """
-        found_client = next(
-            (
-                (addr, data["files"])
-                for addr, data in self.clients.items()
-                if any(file["fname"] == fname for file in data["files"]) and addr != requesting_client
-            ),
-            None,
-        )
+        found_client: list[tuple[tuple[str, int], Any]] = [
+            (addr, data)
+            for addr, data in self.clients.items()
+            if any(file["fname"] == fname for file in data["files"])
+            and addr != requesting_client
+        ]
 
-        if found_client:
-            addr, files = found_client
-            lname = next(file["lname"] for file in files if file["fname"] == fname)
-
+        if len(found_client) > 0:
             response_data = {
                 "header": "fetch",
                 "type": 1,
@@ -226,18 +222,17 @@ class FileServer:
                     "success": True,
                     "message": f"File '{fname}' found",
                     "fname": fname,
-                    "lname": lname,
                     "available_clients": [
                         {
                             "hostname": data["hostname"],
                             "address": addr,
                         }
-                        for addr, data in self.clients.items()
-                        if addr != requesting_client
+                        for (addr, data) in found_client
                     ],
                 },
             }
             response = json.dumps(response_data)
+            print(response)
             client_socket.send(response.encode("utf-8", "replace"))
         else:
             response_data = {
