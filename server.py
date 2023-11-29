@@ -68,7 +68,7 @@ class FileServer:
             self.clients[client_address] = {
                 "hostname": None,
                 "status": "online",
-                "files": {},
+                "files": [],
             }
 
         if self.is_running:
@@ -176,7 +176,7 @@ class FileServer:
 
         if found_client:
             addr, files = found_client
-            lname = next(file["fname"] for file in files if file["fname"] == fname)
+            lname = next(file["lname"] for file in files if file["fname"] == fname)
 
             response_data = {
                 "header": "fetch",

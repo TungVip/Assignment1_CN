@@ -145,7 +145,7 @@ class FileClient:
             "header": "download",
             "type": 1,
             "payload": {
-                "success": False,
+                "success": True,
                 "message": f"{local_name} is available",
                 "length": length,
                 }
@@ -167,15 +167,7 @@ class FileClient:
         data = json.loads(client_socket.recv(1024).decode("utf-8"))
         if not data:
             return None
-        # while data["status"] == "error":
-        #     print(data["message"])
-        #     self.hostname = input("Enter your unique hostname: ")
-        #     self.send_hostname(client_socket)
-        #     data = json.loads(client_socket.recv(1024).decode("utf-8"))
-        #     if not data:
-        #         break
-        #     if data["status"] == "success":
-        #         break
+
         if data["payload"]["success"] == False:
             self.log(data["payload"]["message"])
             return None
@@ -238,13 +230,19 @@ class FileClient:
             }
         }
         request = json.dumps(command)
-        client_socket.send(request.encode("utf-8"))
+        try:
+            client_socket.send(request.encode("utf-8"))
+        except Exception as e:
+            self.log(f"Error fetch file: {e}")
 
     def handle_fetch_sources(self, client_socket, data):
         sources_data = data["payload"]
         print(f"{data}")
         print(sources_data)
         fname = sources_data["fname"]
+        if not sources_data["available_clients"]:
+            self.log("No other clients with the file found!")
+            return
         address = sources_data["available_clients"][0]["address"]
         address = (address[0], int(address[1]))
 
@@ -255,7 +253,11 @@ class FileClient:
             fetch_status = self.download_file(target_socket, fname)
             if fetch_status is True:
                 self.log("Fetch successfully!")
+            else:
+                self.log("Fetch failed!")
             target_socket.close()
+        else:
+            self.log("Fetch failed!")
 
     def quit(self, client_socket):
         self.stop_threads = True  # Set the flag to stop threads

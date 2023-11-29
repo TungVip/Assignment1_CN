@@ -5,8 +5,8 @@ from tkinter import scrolledtext
 
 from server import FileServer
 
-if platform.system().lower().startswith("dar"):
-    from tkmacosx import Button
+
+from tkmacosx import Button
 
 
 class ServerGUI:
