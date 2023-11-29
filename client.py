@@ -3,13 +3,12 @@ import os
 import socket
 import sys
 import threading
-import traceback
 
 
 class FileClient:
     def __init__(self, log_callback=None):
         self.server_host = "localhost"
-        self.server_port = 55555
+        self.server_port = 50000
         self.local_files = {}  # {file_name: file_path}
         self.lock = threading.Lock()  # To synchronize access to shared data
         self.hostname = None
@@ -17,77 +16,101 @@ class FileClient:
         self.stop_threads = False  # Flag to signal threads to terminate
         self.log_callback = log_callback
         self.client_socket = None
+        self.server_connected = False
 
     def log(self, message):
+        """Log a message to the console or using the Logs tab in the GUI.
+
+        Args:
+            message (str): The message to print
+        """
         if self.log_callback:
             self.log_callback(message)
         else:
             print(message)
 
     def login(self, hostname):
-        # self.hostname = input("Enter your unique hostname: ")
+        """Connect to the server and set the client's hostname.
 
-        if not self.client_socket:
-            try:
-                self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                self.client_socket.connect((self.server_host, self.server_port))
-            except Exception as e:
-                self.log(f"Error connect to server: {e}")
-                self.client_socket = None
-                return None
+        Args:
+            hostname (str): the client's hostname
 
-        # Send the client's hostname to the server
+        Returns:
+            tuple[str, int]: the client's address (hostname, port)
+        """
+        with self.lock:
+            if not self.client_socket:
+                try:
+                    self.client_socket = socket.socket(
+                        socket.AF_INET, socket.SOCK_STREAM
+                    )
+                    self.client_socket.setsockopt(
+                        socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+                    )
+                    self.client_socket.connect((self.server_host, self.server_port))
+                    self.server_connected = True
+                except Exception as e:
+                    self.log(f"Error connect to server: {e}")
+                    self.client_socket = None
+                    return None
+
         client_address = self.init_hostname(self.client_socket, hostname)
 
         return client_address
 
     def start(self, client_address):
+        """Start the client with receiving messages from server
+        and listening for incoming connections from peers.
+
+        Args:
+            client_address (tuple[str, int]): the client's address (hostname, port)
+        """
         self.receive_messages_thread = threading.Thread(
             target=self.receive_messages, daemon=True, args=(self.client_socket,)
         )
         self.receive_messages_thread.start()
 
-        # Start the listener thread
         self.listener_thread = threading.Thread(
             target=self.start_listener, daemon=True, args=(client_address,)
         )
         self.listener_thread.start()
 
-        # Command-shell interpreter
-        # while True:
-        #     command = input("Enter command: ")
-        #     if command == "quit":
-        #         self.quit(client_socket)
-        #         break
-        #     self.process_command(client_socket, command)
+    def receive_messages(self, client_socket: socket.socket):
+        """Receive messages from the server.
 
-    def receive_messages(self, client_socket):
-        while not self.stop_threads:
-            try:
-                data = json.loads(client_socket.recv(1024).decode("utf-8", "replace"))
-                if not data:
+        Args:
+            client_socket (socket.socket): the client' socket
+        """
+        with self.lock:
+            while not self.stop_threads and self.server_connected:
+                try:
+                    recvd_data = client_socket.recv(1024).decode("utf-8", "replace")
+                    if not recvd_data:
+                        self.log("Connection closed by the server.")
+                        break
+                    data = json.loads(recvd_data)
+                    print(f"currently at receive message {data}")
+
+                    if data["header"] == "fetch" and data["payload"] is not None:
+                        self.handle_fetch_sources(data)
+                    else:
+                        self.log(data["payload"]["message"])
+                except ConnectionResetError:
+                    self.log("Connection closed by the server.")
                     break
-
-                if data["header"] == "fetch" and data["payload"] is not None:
-                    self.handle_fetch_sources(client_socket, data)
-                    # print(data)
-                else:
-                    self.log(data["payload"]["message"])
-
-            except ConnectionResetError:
-                # Handle the case where the server closes the connection
-                self.log("Connection closed by the server.")
-                break
-
-            except Exception as e:
-                if self.stop_threads:
+                except Exception as e:
+                    if self.stop_threads:
+                        break
+                    self.log(f"Error receiving messages: {e}")
                     break
-                self.log(f"Error receiving messages: {e}")
-                self.log(f"{traceback.format_exc()}")
-                break
+            self.server_connected = False
 
     def start_listener(self, client_address):
+        """Start the listener socket to accept incoming connections.
+
+        Args:
+            client_address (tuple[str, int]): the client's address (hostname, port)
+        """
         self.listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listener_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listener_socket.bind(client_address)
@@ -106,29 +129,42 @@ class FileClient:
                     break
 
     def handle_client(self, client_socket: socket.socket, client_address):
-        while not self.stop_threads and client_socket.fileno() != -1:
+        """Handle an incoming connection.
+
+        Args:
+            client_socket (socket.socket): the peer' socket
+            client_address (tuple[str, int]): the peer's address (hostname, port)
+        """
+        while not self.stop_threads:
             raw_data = client_socket.recv(1024).decode("utf-8", "replace")
-            print(f"This is raw_data received from client fetch request {raw_data}")
             if not raw_data:
                 break
             data = json.loads(raw_data)
-            print(data)
-            if data == {"header": "ping", "type": 0}:
-                respond = {
+
+            if data["header"] == "ping":
+                response = {
                     "header": "ping",
                     "type": 1,
                     "payload": {"success": True, "message": "pong"},
                 }
-                client_socket.sendall(json.dumps(respond).encode("utf-8", "replace"))
+                client_socket.sendall(json.dumps(response).encode("utf-8", "replace"))
                 client_socket.close()
                 break
-
             if data["header"] == "download":
                 self.send_file(client_socket, data["payload"]["fname"])
                 client_socket.close()
                 break
 
     def send_file(self, client_socket: socket.socket, fname):
+        """Send a file to a peer.
+
+        Args:
+            client_socket (socket.socket): the peer's socket
+            fname (str): the file's name on the server
+
+        Returns:
+            bool: True if the file was sent successfully, False otherwise
+        """
         local_name = [
             file for file in self.local_files if self.local_files[file] == fname
         ][0]
@@ -160,7 +196,6 @@ class FileClient:
 
         response_length = (len(binary_reply)).to_bytes(8, "big")
         client_socket.sendall(response_length + binary_reply)
-        print(f"currently at sendall file {reply}")
         with open(os.path.join(self.path, local_name), "rb") as file:
             offset = 0
             try:
@@ -172,7 +207,7 @@ class FileClient:
                 self.log("Connection closed by peer.")
                 return False
             except Exception as e:
-                print(f"Error sending file: {e}")
+                self.log(f"Error sending file: {e}")
                 reply = {
                     "header": "download",
                     "type": 1,
@@ -186,7 +221,16 @@ class FileClient:
                 return False
         return True
 
-    def init_hostname(self, client_socket, hostname):
+    def init_hostname(self, client_socket: socket.socket, hostname: str):
+        """Send the client's hostname to the server and receive the client's address.
+
+        Args:
+            client_socket (socket.socket): the client' socket
+            hostname (_type_): the client's hostname
+
+        Returns:
+            tuple[str, int]: the client's address (hostname, port)
+        """
         self.hostname = hostname
         self.send_hostname(client_socket)
         data = json.loads(client_socket.recv(1024).decode("utf-8", "replace"))
@@ -198,46 +242,45 @@ class FileClient:
             return None
         address = data["payload"]["address"]
         address = (address[0], int(address[1]))
-        # self.start_listener(address)
         return address
 
-    def process_command(self, client_socket, command):
-        command_parts = command.split()
+    def publish(self, client_socket: socket.socket, local_name: str, file_name: str):
+        """Publish a file aliased as file_name to the server.
 
-        if command_parts[0] == "publish":
-            if command_parts[1] == "" or command_parts[2] == "":
-                raise ValueError("filename and localname are required")
-            elif not os.path.exists(command_parts[1]):
-                raise FileNotFoundError(f"{command_parts[1]} is not available")
-            elif not os.path.isfile(command_parts[1]):
-                raise FileExistsError(f"{command_parts[1]} is not a file")
-            else:
-                self.publish(client_socket, command_parts[1], command_parts[2])
-        elif command_parts[0] == "fetch":
-            self.fetch(client_socket, command_parts[1])
-        else:
-            print(f"Unknown command: {command}")
+        Args:
+            client_socket (socket.socket): the client' socket
+            local_name (str): name of the file on the client's machine
+            file_name (str): name of the file on the server
 
-    def publish(self, client_socket, local_name: str, file_name: str):
-        # make file_name has the same extension as local_name
+        Returns:
+            bool: True if the file was published successfully, False otherwise
+        """
+        if self.server_connected is False:
+            self.log("Not connected to server.")
+            return False
+
         if len(local_name.split(".")) > 0:
             file_name = file_name + "." + local_name.split(".")[-1]
 
-        with self.lock:
-            if local_name in self.local_files or file_name in self.local_files.values():
-                self.log(
-                    f"File with local name '{local_name}'"
-                    f" or file name '{file_name}' already exists."
-                )
-                return False
+        if not os.path.exists(os.path.join(self.path, local_name)):
+            self.log(f"File with local name '{local_name}' does not exist.")
+            return False
 
-        # command = f"publish {local_name} {file_name}"
-        command = {
-            "header": "publish",
-            "type": 0,
-            "payload": {"lname": local_name, "fname": file_name},
-        }
-        request = json.dumps(command)
+        if local_name in self.local_files or file_name in self.local_files.values():
+            self.log(
+                f"File with local name '{local_name}'"
+                f" or file name '{file_name}' already exists."
+            )
+            return False
+
+        request = json.dumps(
+            {
+                "header": "publish",
+                "type": 0,
+                "payload": {"lname": local_name, "fname": file_name},
+            }
+        )
+
         try:
             client_socket.sendall(request.encode("utf-8", "replace"))
         except Exception as e:
@@ -248,8 +291,17 @@ class FileClient:
         self.log(f"Published: '{local_name}' as '{file_name}'")
         return True
 
-    def fetch(self, client_socket, file_name):
-        # command = f"fetch {file_name}"
+    def fetch(self, client_socket: socket.socket, file_name: str):
+        """Fetch a file from the server into the client's directory.
+
+        Args:
+            client_socket (socket.socket): the client' socket
+            file_name (str): the file's name on the server to fetch
+        """
+        if self.server_connected is False:
+            self.log("Not connected to server.")
+            return
+
         command = {"header": "fetch", "type": 0, "payload": {"fname": file_name}}
         request = json.dumps(command)
         try:
@@ -257,10 +309,13 @@ class FileClient:
         except Exception as e:
             self.log(f"Error fetch file: {e}")
 
-    def handle_fetch_sources(self, client_socket, data):
+    def handle_fetch_sources(self, data):
+        """Handle the fetch response from the server.
+
+        Args:
+            data (obj): response from the server
+        """
         sources_data = data["payload"]
-        print(f"{data}")
-        print(sources_data)
         fname = sources_data["fname"]
         if not sources_data["success"]:
             self.log("No other clients with the file found!")
@@ -268,9 +323,7 @@ class FileClient:
         address = sources_data["available_clients"][0]["address"]
         address = (address[0], int(address[1]))
 
-        # Automatically initiate P2P connection to the source
         target_socket = self.p2p_connect(address)
-        # print(target_socket)
         if target_socket:
             fetch_status = self.download_file(target_socket, fname)
             if fetch_status is True:
@@ -283,8 +336,13 @@ class FileClient:
         else:
             self.log("Fetch failed!")
 
-    def quit(self, client_socket):
-        self.stop_threads = True  # Set the flag to stop threads
+    def quit(self, client_socket: socket.socket):
+        """Quit the client.
+
+        Args:
+            client_socket (socket): the client' socket
+        """
+        self.stop_threads = True
         with self.lock:
             command = {
                 "type": "quit",
@@ -300,8 +358,12 @@ class FileClient:
         print("Client connection closed. Exiting.")
         sys.exit(0)
 
-    def send_hostname(self, client_socket):
-        # command = f"hostname {self.hostname}"
+    def send_hostname(self, client_socket: socket.socket):
+        """Send the client's hostname to the server.
+
+        Args:
+            client_socket (socket.socket): the client' socket
+        """
         command = {
             "header": "sethost",
             "type": 0,
@@ -313,6 +375,14 @@ class FileClient:
         client_socket.sendall(request.encode("utf-8", "replace"))
 
     def p2p_connect(self, target_address):
+        """Connect to a peer.
+
+        Args:
+            target_address (tuple[str, int]): the peer's address (hostname, port)
+
+        Returns:
+            socket: the socket connected to the peer
+        """
         try:
             target_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # target_socket.connect((target_address, self.server_port))
@@ -323,7 +393,15 @@ class FileClient:
             return None
 
     def download_file(self, target_socket: socket.socket, file_name):
-        # Implement file download logic here
+        """Download a file from a peer.
+
+        Args:
+            target_socket (socket.socket): the peer's socket
+            file_name (str): the file's name on the peer
+
+        Returns:
+            bool: True if the file was downloaded successfully, False otherwise
+        """
         data = {
             "header": "download",
             "type": 0,
@@ -337,7 +415,6 @@ class FileClient:
         recved_data = target_socket.recv(response_length).decode("utf-8", "replace")
 
         data = json.loads(recved_data)
-        print(f"currently at download file {data}")
         fname = file_name
         if os.path.isfile(os.path.join(self.path, fname)):
             fname = fname.split(".")[0] + "_copy." + fname.split(".")[1]
@@ -367,12 +444,6 @@ class FileClient:
                 self.log("Connection closed by peer.")
                 return False
             except Exception as e:
-                print(f"Error receiving file: {e}")
                 self.log(f"Error receiving file: {e}")
                 return False
         return True
-
-
-# if __name__ == "__main__":
-#     client = FileClient()
-#     client.start()

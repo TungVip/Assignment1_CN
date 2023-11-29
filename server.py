@@ -12,29 +12,41 @@ class FileServer:
         self.port = port
         self.clients = (
             {}
-        )  # {client_address: {"hostname": hostname, "files": [list of files]}}
-        self.lock = threading.Lock()  # To synchronize access to shared data
-        self.is_running = False  # Flag to control server running state
+        )  # {client_address: {"hostname": hostname, "files": [dict of files]}}
+        self.lock = threading.Lock()
+        self.is_running = False
         self.log_callback = log_callback
         self.log_request_callback = log_request_callback
 
     def log(self, message):
+        """Log a message to the console or to a callback function
+
+        Args:
+            message (str): The message to log
+        """
         if self.log_callback:
             self.log_callback(message)
         else:
             print(message)
 
     def log_request(self, message):
+        """Log a request to the console or to a callback function
+
+        Args:
+            message (str): The message to log
+        """
         if self.log_request_callback:
             self.log_request_callback(message)
         else:
             print(message)
 
     def start(self):
+        """Start the server in a separate thread"""
         server_thread = threading.Thread(target=self.run_server, daemon=True)
         server_thread.start()
 
     def run_server(self):
+        """Setup socket for the server and start listening for connections"""
         with self.lock:
             if self.is_running:
                 self.log("Server is already running!")
@@ -64,8 +76,15 @@ class FileServer:
                     self.log(f"Error accepting connection: {e}")
 
     def handle_client(self, client_socket, client_address):
+        """Handle a client connection
+
+        Args:
+            client_socket (socket): The client' socket
+            client_address (tuple[str, int]): The client's address
+        """
         with self.lock:
             self.clients[client_address] = {
+                "client_socket": client_socket,
                 "hostname": None,
                 "status": "online",
                 "files": [],
@@ -102,6 +121,13 @@ class FileServer:
                 self.log(f"Connection from {client_address} closed")
 
     def process_command(self, client_socket, client_address, command):
+        """Process a command received from a client
+
+        Args:
+            client_socket (socket): The client' socket
+            client_address (tuple[str, int]): The client's address
+            command (str): The command to process
+        """
         with self.lock:
             if command["header"] == "publish":
                 self.log_request(
@@ -135,6 +161,11 @@ class FileServer:
                 )
 
     def process_server_command(self, command):
+        """Process a command received from the server console
+
+        Args:
+            command (str): The command to process
+        """
         with self.lock:
             if self.is_running:
                 command_parts = command.split()
@@ -154,17 +185,32 @@ class FileServer:
                 self.log("Start the server before sending commands!")
 
     def publish(self, client_address, lname, fname):
+        """Handle publish request from client
+
+        Args:
+            client_address (tuple[str, int]): The client's address
+            lname (str): file's name on the client's machine
+            fname (str): file's name on the server
+        """
         if client_address in self.clients:
             self.clients[client_address]["files"].append(
                 {"lname": lname, "fname": fname}
             )
             self.log(
-                f"File '{fname}' published by {client_address} with local name '{lname}'"
+                f"File '{fname}' published by {client_address}"
+                "with local name '{lname}'"
             )
         else:
             self.log(f"Unknown client {client_address}")
 
     def fetch(self, client_socket, requesting_client, fname):
+        """Handle fetch request from client
+
+        Args:
+            client_socket (socket): The client' socket
+            requesting_client (tuple[str, int]): Client's address
+            fname (str): file's name on the server
+        """
         found_client = next(
             (
                 (addr, data["files"])
@@ -213,16 +259,26 @@ class FileServer:
             client_socket.send(response.encode("utf-8", "replace"))
 
     def quit(self, client_socket, client_address):
+        """Stop the connection with the client
+
+        Args:
+            client_socket (socket): the client' socket
+            client_address (tuple[str, int]): the client's address
+        """
         client = self.clients[client_address]
         client.update({"status": "offline"})
-        #     if client_address in self.clients:
-        #         del self.clients[client_address]
         if client_socket:
             client_socket.close()
-        #     print(f"Connection from {client_address} closed")
         self.log(f"The client {client_address} has quitted")
 
     def set_hostname(self, client_socket, client_address, hostname: str):
+        """Set the hostname for a client
+
+        Args:
+            client_socket (socket): The client' socket
+            client_address (tuple[str, int]): The client's address
+            hostname (str): The hostname to set
+        """
         if client_address in self.clients:
             if " " in hostname:
                 response = json.dumps(
@@ -250,7 +306,8 @@ class FileServer:
                         "type": 1,
                         "payload": {
                             "success": True,
-                            "message": f"Hostname '{hostname}' set for {client_address}",
+                            "message": f"Hostname '{hostname}' "
+                            f"set for {client_address}",
                             "hostname": hostname,
                             "address": client_address,
                         },
@@ -288,11 +345,16 @@ class FileServer:
             client_socket.send(response.encode("utf-8", "replace"))
 
     def server_discover(self, hostname):
-        found_clients = {
-            addr: data["files"]
-            for addr, data in self.clients.items()
+        """Discover published files with the given hostname
+
+        Args:
+            hostname (str): The hostname to search for
+        """
+        found_clients = [
+            data["files"]
+            for data in self.clients.items()
             if data["hostname"] == hostname
-        }
+        ]
 
         if found_clients:
             response = f"Files on hosts with hostname '{hostname}': {found_clients}"
@@ -302,21 +364,33 @@ class FileServer:
         self.log(response)
 
     def server_ping(self, hostname):
-        found_clients = {
-            addr: data["files"]
-            for addr, data in self.clients.items()
-            if data["hostname"] == hostname
-        }
+        """Ping a client with the given hostname
 
-        if found_clients:
-            for client_address in found_clients:
-                self.log(f"Pinging {hostname}...")
-                response_data = self.send_ping(client_address)
-                self.log(response_data)
+        Args:
+            hostname (str): The hostname to ping
+        """
+        found_client = None
+        for addr, data in self.clients.items():
+            if data["hostname"] == hostname:
+                found_client = addr
+                break
+
+        if found_client:
+            self.log(f"Pinging {hostname}...")
+            response_data = self.send_ping(addr)
+            self.log(response_data)
         else:
             self.log(f"Unknown client '{hostname}'")
 
     def send_ping(self, client_address):
+        """Send a ping request to a client
+
+        Args:
+            client_address (tuple[str, int]): the client's address
+
+        Returns:
+            str: Result to print to the console
+        """
         if client_address in self.clients:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
@@ -332,10 +406,10 @@ class FileServer:
                     end_time = time.time()
                     return (
                         f"Client status: Alive\n"
-                        f"RTT: {(end_time - start_time) * 1000} miliseconds"
+                        f"RTT: {((end_time - start_time) * 1000):.3f} miliseconds"
                     )
                 else:
-                    return f"Client status: Not Alive\nRTT: None"
+                    return "Client status: Not Alive\nRTT: None"
             except Exception as e:
                 return f"Error pinging client: {e}"
             finally:
@@ -344,10 +418,12 @@ class FileServer:
             return f"Unknown client {client_address}"
 
     def shutdown(self):
+        """Shutdown the server"""
         self.log("Shutting down the server...")
         self.is_running = False
         try:
-            # Create a dummy connection to unblock the server from accept, and then close the server socket
+            # Create a dummy connection to unblock the server from accept,
+            # and then close the server socket
             dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             dummy_socket.connect((self.host, self.port))
             dummy_socket.close()

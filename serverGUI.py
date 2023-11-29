@@ -151,5 +151,5 @@ class ServerGUI:
 
 
 if __name__ == "__main__":
-    gui = ServerGUI("localhost", 55555)  # 192.168.1.247
+    gui = ServerGUI("localhost", 50000)  # 192.168.1.247
     gui.root.mainloop()

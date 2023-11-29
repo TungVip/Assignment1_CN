@@ -241,13 +241,15 @@ class FileClientGUI:
                     ):
                         self.repo_box.insert(
                             tk.END,
-                            f"\n{file[:25] + '...' if len(file) > 25 else file} - {self.client.local_files[file]}",
+                            f"\n{file[:25] + '...' if len(file) > 25 else file} - "
+                            "{self.client.local_files[file]}",
                         )
                         self.files[file] = True
                     else:
                         self.repo_box.insert(
                             tk.END,
-                            f"\n{file[:35] + '...' if len(file) > 35 else file} (not published)",
+                            f"\n{file[:35] + '...' if len(file) > 35 else file} "
+                            "(not published)",
                         )
                 self.repo_box.config(state=tk.DISABLED)
 
