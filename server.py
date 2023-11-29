@@ -31,7 +31,7 @@ class FileServer:
             print(message)
 
     def start(self):
-        server_thread = threading.Thread(target=self.run_server)
+        server_thread = threading.Thread(target=self.run_server, daemon=True)
         server_thread.start()
 
     def run_server(self):
@@ -76,7 +76,7 @@ class FileServer:
 
         while self.clients[client_address]["status"] == "online" and self.is_running:
             try:
-                data = client_socket.recv(1024).decode("utf-8")
+                data = client_socket.recv(1024).decode("utf-8", "replace")
                 if not data:
                     break
 
@@ -197,7 +197,7 @@ class FileServer:
                 },
             }
             response = json.dumps(response_data)
-            client_socket.send(response.encode("utf-8"))
+            client_socket.send(response.encode("utf-8", "replace"))
         else:
             response_data = {
                 "header": "fetch",
@@ -210,7 +210,7 @@ class FileServer:
                 },
             }
             response = json.dumps(response_data)
-            client_socket.send(response.encode("utf-8"))
+            client_socket.send(response.encode("utf-8", "replace"))
 
     def quit(self, client_socket, client_address):
         client = self.clients[client_address]
@@ -237,7 +237,7 @@ class FileServer:
                         },
                     }
                 )
-                client_socket.send(response.encode("utf-8"))
+                client_socket.send(response.encode("utf-8", "replace"))
             else:
                 if not any(
                     data["hostname"] == hostname
@@ -257,7 +257,7 @@ class FileServer:
                     }
                     response = json.dumps(response_data)
                     self.log(response_data["payload"]["message"])
-                    client_socket.send(response.encode("utf-8"))
+                    client_socket.send(response.encode("utf-8", "replace"))
                 else:
                     response_data = {
                         "header": "sethost",
@@ -271,7 +271,7 @@ class FileServer:
                     }
                     response = json.dumps(response_data)
                     self.log(response_data["payload"]["message"])
-                    client_socket.send(response.encode("utf-8"))
+                    client_socket.send(response.encode("utf-8", "replace"))
         else:
             response_data = {
                 "header": "sethost",
@@ -285,7 +285,7 @@ class FileServer:
             }
             response = json.dumps(response_data)
             self.log(response_data["payload"]["message"])
-            client_socket.send(response.encode("utf-8"))
+            client_socket.send(response.encode("utf-8", "replace"))
 
     def server_discover(self, hostname):
         found_clients = {
@@ -323,12 +323,12 @@ class FileServer:
                 client_socket.connect(client_address)
                 ping_message = {"header": "ping", "type": 0}
                 start_time = time.time()
-                client_socket.send(json.dumps(ping_message).encode("utf-8"))
+                client_socket.send(json.dumps(ping_message).encode("utf-8", "replace"))
 
                 ready, _, _ = select.select([client_socket], [], [], 8.0)
 
                 if ready:
-                    client_socket.recv(1024).decode("utf-8")
+                    client_socket.recv(1024).decode("utf-8", "replace")
                     end_time = time.time()
                     return (
                         f"Client status: Alive\n"

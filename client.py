@@ -4,13 +4,12 @@ import socket
 import sys
 import threading
 import traceback
-from typing import BinaryIO
 
 
 class FileClient:
     def __init__(self, log_callback=None):
         self.server_host = "localhost"
-        self.server_port = 2701
+        self.server_port = 55555
         self.local_files = {}  # {file_name: file_path}
         self.lock = threading.Lock()  # To synchronize access to shared data
         self.hostname = None
@@ -66,11 +65,11 @@ class FileClient:
     def receive_messages(self, client_socket):
         while not self.stop_threads:
             try:
-                data = json.loads(client_socket.recv(1024).decode("utf-8"))
+                data = json.loads(client_socket.recv(1024).decode("utf-8", "replace"))
                 if not data:
                     break
 
-                if data["header"] == "fetch" and data["payload"]["success"]:
+                if data["header"] == "fetch" and data["payload"] is not None:
                     self.handle_fetch_sources(client_socket, data)
                     # print(data)
                 else:
@@ -108,7 +107,7 @@ class FileClient:
 
     def handle_client(self, client_socket: socket.socket, client_address):
         while not self.stop_threads and client_socket.fileno() != -1:
-            raw_data = client_socket.recv(1024).decode("utf-8")
+            raw_data = client_socket.recv(1024).decode("utf-8", "replace")
             print(f"This is raw_data received from client fetch request {raw_data}")
             if not raw_data:
                 break
@@ -120,7 +119,7 @@ class FileClient:
                     "type": 1,
                     "payload": {"success": True, "message": "pong"},
                 }
-                client_socket.sendall(json.dumps(respond).encode("utf-8"))
+                client_socket.sendall(json.dumps(respond).encode("utf-8", "replace"))
                 client_socket.close()
                 break
 
@@ -145,7 +144,7 @@ class FileClient:
                     "length": None,
                 },
             }
-            client_socket.sendall(json.dumps(reply).encode())
+            client_socket.sendall(json.dumps(reply).encode("utf-8", "replace"))
 
         length = os.path.getsize(os.path.join(self.path, local_name))
         reply = {
@@ -157,16 +156,21 @@ class FileClient:
                 "length": length,
             },
         }
-        client_socket.sendall(json.dumps(reply).encode())
+        binary_reply = json.dumps(reply).encode("utf-8", "replace")
+
+        response_length = (len(binary_reply)).to_bytes(8, "big")
+        client_socket.sendall(response_length + binary_reply)
         print(f"currently at sendall file {reply}")
         with open(os.path.join(self.path, local_name), "rb") as file:
             offset = 0
-            file: BinaryIO
             try:
                 while offset < length:
                     data = file.read(1024)
                     offset += len(data)
                     client_socket.sendall(data)
+            except ConnectionResetError:
+                self.log("Connection closed by peer.")
+                return False
             except Exception as e:
                 print(f"Error sending file: {e}")
                 reply = {
@@ -178,18 +182,18 @@ class FileClient:
                         "length": length,
                     },
                 }
-                client_socket.sendall(json.dumps(reply).encode())
+                client_socket.sendall(json.dumps(reply).encode("utf-8", "replace"))
                 return False
         return True
 
     def init_hostname(self, client_socket, hostname):
         self.hostname = hostname
         self.send_hostname(client_socket)
-        data = json.loads(client_socket.recv(1024).decode("utf-8"))
+        data = json.loads(client_socket.recv(1024).decode("utf-8", "replace"))
         if not data:
             return None
 
-        if data["payload"]["success"] == False:
+        if data["payload"]["success"] is False:
             self.log(data["payload"]["message"])
             return None
         address = data["payload"]["address"]
@@ -235,11 +239,11 @@ class FileClient:
         }
         request = json.dumps(command)
         try:
-            client_socket.sendall(request.encode("utf-8"))
+            client_socket.sendall(request.encode("utf-8", "replace"))
         except Exception as e:
             self.log(f"Error publish file to server: {e}")
             return False
-        
+
         self.local_files[local_name] = file_name
         self.log(f"Published: '{local_name}' as '{file_name}'")
         return True
@@ -249,7 +253,7 @@ class FileClient:
         command = {"header": "fetch", "type": 0, "payload": {"fname": file_name}}
         request = json.dumps(command)
         try:
-            client_socket.sendall(request.encode("utf-8"))
+            client_socket.sendall(request.encode("utf-8", "replace"))
         except Exception as e:
             self.log(f"Error fetch file: {e}")
 
@@ -258,7 +262,7 @@ class FileClient:
         print(f"{data}")
         print(sources_data)
         fname = sources_data["fname"]
-        if not sources_data["available_clients"]:
+        if not sources_data["success"]:
             self.log("No other clients with the file found!")
             return
         address = sources_data["available_clients"][0]["address"]
@@ -273,6 +277,8 @@ class FileClient:
                 self.log("Fetch successfully!")
             else:
                 self.log("Fetch failed!")
+                if os.path.isfile(os.path.join(self.path, fname)):
+                    os.remove(os.path.join(self.path, fname))
             target_socket.close()
         else:
             self.log("Fetch failed!")
@@ -285,7 +291,7 @@ class FileClient:
             }
             try:
                 request = json.dumps(command)
-                client_socket.sendall(request.encode("utf-8"))
+                client_socket.sendall(request.encode("utf-8", "replace"))
             except Exception as e:
                 self.log(f"Error connecting to server: {e}")
         client_socket.close()
@@ -304,7 +310,7 @@ class FileClient:
             },
         }
         request = json.dumps(command)
-        client_socket.sendall(request.encode("utf-8"))
+        client_socket.sendall(request.encode("utf-8", "replace"))
 
     def p2p_connect(self, target_address):
         try:
@@ -325,18 +331,22 @@ class FileClient:
                 "fname": file_name,
             },
         }
-        target_socket.sendall(json.dumps(data).encode("utf-8"))
+        target_socket.sendall(json.dumps(data).encode("utf-8", "replace"))
 
-        data = json.loads(target_socket.recv(1024).decode())
+        response_length = int(target_socket.recv(8).decode("utf-8", "replace"))
+        recved_data = target_socket.recv(response_length).decode("utf-8", "replace")
+
+        data = json.loads(recved_data)
         print(f"currently at download file {data}")
         fname = file_name
         if os.path.isfile(os.path.join(self.path, fname)):
             fname = fname.split(".")[0] + "_copy." + fname.split(".")[1]
         length = data["payload"]["length"]
-        if data["payload"]["success"] == False:
+        if data["payload"]["success"] is False:
             self.log(data["payload"]["message"])
             return False
 
+        self.log("Downloading file...")
         with open(os.path.join(self.path, fname), "wb") as file:
             try:
                 offset = 0
@@ -344,6 +354,13 @@ class FileClient:
                     recved = target_socket.recv(1024)
                     file.write(recved)
                     offset += 1024
+                    self.log(f"Received {offset} bytes of data...")
+
+                self.log("Download completed!")
+
+            except ConnectionResetError:
+                self.log("Connection closed by peer.")
+                return False
             except Exception as e:
                 print(f"Error receiving file: {e}")
                 self.log(f"Error receiving file: {e}")

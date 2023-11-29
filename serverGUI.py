@@ -3,7 +3,10 @@ import threading
 import tkinter as tk
 from tkinter import scrolledtext
 
-from tkmacosx import Button
+if platform.system() == "Darwin":
+    from tkmacosx import Button
+else:
+    from tkinter import Button
 
 from server import FileServer
 
