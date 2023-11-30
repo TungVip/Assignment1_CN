@@ -107,6 +107,10 @@ class FileServer:
 
                 self.process_command(client_socket, client_address, data)
 
+            except ConnectionResetError:
+                self.log("Connection closed by the client.")
+                break
+            
             except Exception as e:
                 if self.clients[client_address]["status"] == "offline":
                     break
@@ -194,7 +198,7 @@ class FileServer:
             )
             self.log(
                 f"File '{fname}' published by {client_address}"
-                f"with local name '{lname}'"
+                f" with local name '{lname}'"
             )
         else:
             self.log(f"Unknown client {client_address}")
@@ -336,7 +340,12 @@ class FileServer:
             data["files"]
             for _, data in self.clients.items()
             if data["hostname"] == hostname
-        ][0]
+        ]
+
+        if found_files:
+            found_files = found_files[0]
+        else:
+            found_files = []
 
         if len(found_files) > 0:
             response = f"Files on hosts with hostname '{hostname}':\n"
