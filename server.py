@@ -7,13 +7,14 @@ import time
 from typing import Any
 
 
-class FileServer:
+class ServerLogic:
     def __init__(self, host, port, log_callback=None, log_request_callback=None):
         self.host = host
         self.port = port
+        # clients -> {client_address: {"hostname": hostname, "files": [dictionary of files]}}
         self.clients = (
             {}
-        )  # {client_address: {"hostname": hostname, "files": [dict of files]}}
+        )  
         self.lock = threading.Lock()
         self.is_running = False
         self.log_callback = log_callback
